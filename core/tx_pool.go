@@ -905,6 +905,23 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	}
 }
 
+
+func (pool *TxPool) RemoveTxs(hashes []common.Hash) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	for _, hash := range hashes {
+		pool.removeTx(hash,true)
+	}
+}
+
+func (pool *TxPool) RemoveTx(hash common.Hash) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	pool.removeTx(hash,true)
+}
+
+
+
 // promoteExecutables moves transactions that have become processable from the
 // future queue to the set of pending transactions. During this process, all
 // invalidated transactions (low nonce, low balance) are deleted.
