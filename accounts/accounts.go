@@ -17,6 +17,8 @@
 // Package accounts implements high level Ethereum account management.
 package accounts
 
+//this is zxx
+
 import (
 	"math/big"
 
