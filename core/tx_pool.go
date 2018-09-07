@@ -339,6 +339,32 @@ func (pool *TxPool) loop() {
 	}
 }
 
+func (pool *TxPool) CopyPendingState() *state.StateDB {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	pendingState := state.ManageState(pool.currentState)
+
+	for addr, list := range pool.pending {
+		txs := list.Flatten() // Heavy but will be cached and is needed by the miner anyway
+		pendingState.SetNonce(addr, txs[len(txs)-1].Nonce()+1)
+	}
+	return pendingState.StateDB
+}
+
+func (pool *TxPool) CopyPendingStateToCurPos() *state.StateDB {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	pendingState := state.ManageState(pool.currentState)
+
+	for addr, list := range pool.pending {
+		txs := list.Flatten() // Heavy but will be cached and is needed by the miner anyway
+		pendingState.SetNonce(addr, txs[len(txs)-1].Nonce()+1)
+	}
+	return pendingState.StateDB
+}
+
 // lockedReset is a wrapper around reset to allow calling it in a thread safe
 // manner. This method is only ever used in the tester!
 func (pool *TxPool) lockedReset(oldHead, newHead *types.Header) {
@@ -655,7 +681,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
 
 		// We've directly injected a replacement transaction, notify subsystems
-		go pool.txFeed.Send(TxPreEvent{tx})
+		pool.txFeed.Send(TxPreEvent{tx})  //leilei delete go routine call for ethermint checkTx
 
 		return old != nil, nil
 	}
@@ -749,7 +775,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
 
-	go pool.txFeed.Send(TxPreEvent{tx})
+	pool.txFeed.Send(TxPreEvent{tx}) //leilei delete go routine call for ethermint checkTx
 }
 
 // AddLocal enqueues a single transaction into the pool if it is valid, marking
