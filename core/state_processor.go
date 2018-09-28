@@ -25,8 +25,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/core/blacklist"
-	"fmt"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -135,4 +133,3 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 
 	return receipt, gas, err
 }
-
