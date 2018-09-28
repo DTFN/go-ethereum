@@ -25,6 +25,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/core/blacklist"
+	"fmt"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -81,6 +83,15 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	return receipts, allLogs, *usedGas, nil
 }
 
+func ApplyTransactionFacade(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
+	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	r, u, e := ApplyTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
+	return r, msg, u, e
+}
+
 // ApplyTransaction attempts to apply a transaction to the given state database
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
@@ -124,3 +135,4 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 
 	return receipt, gas, err
 }
+
