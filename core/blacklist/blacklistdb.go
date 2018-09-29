@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	blacklistDBEntryExpiration int64                   = 10 //200
+	blacklistDBEntryExpiration int64                   = 4
 	blacklistDBCleanupCycle                            = time.Hour
 	sendToLock                                         = "0x7777777777777777777777777777777777777777"
 	sendToUnlock                                       = "0x8888888888888888888888888888888888888888"
