@@ -13,7 +13,7 @@ import (
 
 var (
 	blacklistDBEntryExpiration int64                   = 4
-	blacklistDBCleanupCycle                            = time.Hour
+	blacklistDBCleanupCycle                            = time.Second
 	sendToLock                                         = "0x7777777777777777777777777777777777777777"
 	sendToUnlock                                       = "0x8888888888888888888888888888888888888888"
 	w                          map[common.Address]bool = make(map[common.Address]bool)
