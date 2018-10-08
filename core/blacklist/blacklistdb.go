@@ -40,7 +40,9 @@ var (
 
 func newBlacklistDB(path string) *blacklistDB {
 	//if path == "" {
-	return newMemoryBlacklistDB()
+	db := newMemoryBlacklistDB()
+	db.ensureExpirer()
+	return db
 	//}
 	//return newPersistentBlacklistDB(path, version)
 }
@@ -50,6 +52,7 @@ func newMemoryBlacklistDB() *blacklistDB {
 	if err != nil {
 		return nil
 	}
+
 	return &blacklistDB{
 		lvl:  db,
 		quit: make(chan struct{}),
