@@ -9,21 +9,22 @@ import (
 	"encoding/binary"
 	"log"
 	lg "github.com/ethereum/go-ethereum/log"
+	"strings"
 )
 
 var (
-	blacklistDBEntryExpiration int64                   = 4
-	blacklistDBCleanupCycle                            = 60 * time.Second
-	sendToLock                                         = "0x7777777777777777777777777777777777777777"
-	sendToUnlock                                       = "0x8888888888888888888888888888888888888888"
-	w                          map[common.Address]bool = make(map[common.Address]bool)
+	blacklistDBEntryExpiration int64           = 4
+	blacklistDBCleanupCycle                    = 60 * time.Second
+	sendToLock                                 = "0x7777777777777777777777777777777777777777"
+	sendToUnlock                               = "0x8888888888888888888888888888888888888888"
+	w                          map[string]bool = make(map[string]bool)
 )
 
 var BlacklistDB *blacklistDB = newBlacklistDB("")
 
 func init() {
-	w[common.HexToAddress(sendToLock)] = true
-	w[common.HexToAddress(sendToUnlock)] = true
+	w[sendToLock] = true
+	w[sendToUnlock] = true
 }
 
 type blacklistDB struct {
@@ -104,7 +105,7 @@ func (db *blacklistDB) IsBlocked(from common.Address, to *common.Address) bool {
 		return false;
 	}
 	// from 在黑名单或者仍在删除锁定期内，并且 to 为空或者非 (0x777,0x888)
-	return (h == -1 || h+blacklistDBEntryExpiration >= db.getCurrentHeight()) && (to == nil || !w[*to]);
+	return (h == -1 || h+blacklistDBEntryExpiration >= db.getCurrentHeight()) && (to == nil || !w[to.Hex()]);
 }
 
 func (db *blacklistDB) Add(address common.Address) error {
@@ -151,10 +152,10 @@ func (db *blacklistDB) expireNodes() error {
 	return nil
 }
 
-func IsLockTx(to common.Address) bool {
-	return to == common.HexToAddress(sendToLock)
+func IsLockTx(to string) bool {
+	return strings.EqualFold(to, sendToLock)
 }
 
-func IsUnlockTx(to common.Address) bool {
-	return to == common.HexToAddress(sendToUnlock)
+func IsUnlockTx(to string) bool {
+	return strings.EqualFold(to, sendToUnlock)
 }
