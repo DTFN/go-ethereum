@@ -13,7 +13,7 @@ import (
 
 var (
 	blacklistDBEntryExpiration int64                   = 4
-	blacklistDBCleanupCycle                            = time.Second
+	blacklistDBCleanupCycle                            = 60 * time.Second
 	sendToLock                                         = "0x7777777777777777777777777777777777777777"
 	sendToUnlock                                       = "0x8888888888888888888888888888888888888888"
 	w                          map[common.Address]bool = make(map[common.Address]bool)
@@ -95,7 +95,7 @@ func (db *blacklistDB) storeInt64(key []byte, n int64) error {
 
 func (db *blacklistDB) IsBlocked(from common.Address, to *common.Address) bool {
 	h, ok := db.fetchInt64(makeKey(from))
-	log.Info(fmt.Sprint("ok:", ok, ",from:", from.Hex(), ", to:", to.Hex(), ", h:", h, ", db.curHeight:", db.getCurrentHeight()))
+	log.Info(fmt.Sprint("blacklist ok:", ok, ",from:", from.Hex(), ", to:", to.Hex(), ", h:", h, ", db.curHeight:", db.getCurrentHeight()))
 	if !ok {
 		return false;
 	}
@@ -121,6 +121,7 @@ func (db *blacklistDB) expirer() {
 	for {
 		select {
 		case <-tick.C:
+			log.Info("blacklist expirer...")
 			if err := db.expireNodes(); err != nil {
 				log.Error(fmt.Sprintf("Failed to expire nodedb items: %v", err))
 			}
