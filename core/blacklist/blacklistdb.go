@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"encoding/binary"
 	"log"
-	lg "github.com/ethereum/go-ethereum/log"
 	"strings"
 )
 
@@ -113,8 +112,12 @@ func (db *blacklistDB) Add(address common.Address) error {
 }
 
 func (db *blacklistDB) Remove(address common.Address) error {
-	lg.Error("remove:" + address.Hex())
 	log.Println("blacklist remove:", address.Hex())
+	key := makeKey(address)
+	v, _ := db.fetchInt64(key)
+	if v == -1 {
+		return nil
+	}
 	return db.storeInt64(makeKey(address), db.getCurrentHeight())
 }
 
