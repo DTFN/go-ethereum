@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"encoding/binary"
 	"fmt"
-	"github.com/ethereum/go-ethereum/log"
+	"log"
 )
 
 var (
@@ -98,7 +98,7 @@ func (db *blacklistDB) storeInt64(key []byte, n int64) error {
 
 func (db *blacklistDB) IsBlocked(from common.Address, to *common.Address) bool {
 	h, ok := db.fetchInt64(makeKey(from))
-	log.Info(fmt.Sprint("blacklist ok:", ok, ",from:", from.Hex(), ", to:", to.Hex(), ", h:", h, ", db.curHeight:", db.getCurrentHeight()))
+	log.Println("blacklist ok:", ok, ",from:", from.Hex(), ", to:", to.Hex(), ", h:", h, ", db.curHeight:", db.getCurrentHeight())
 	if !ok {
 		return false;
 	}
@@ -124,9 +124,9 @@ func (db *blacklistDB) expirer() {
 	for {
 		select {
 		case <-tick.C:
-			log.Info("blacklist expirer...")
+			log.Println("blacklist expirer...")
 			if err := db.expireNodes(); err != nil {
-				log.Error(fmt.Sprintf("Failed to expire nodedb items: %v", err))
+				log.Println(fmt.Sprintf("Failed to expire nodedb items: %v", err))
 			}
 		case <-db.quit:
 			return
