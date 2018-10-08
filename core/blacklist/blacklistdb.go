@@ -107,7 +107,12 @@ func (db *blacklistDB) Add(address common.Address) error {
 }
 
 func (db *blacklistDB) Remove(address common.Address) error {
-	return db.storeInt64(makeKey(address), db.getCurrentHeight())
+	key := makeKey(address)
+	v, _ := db.fetchInt64(key)
+	if v == -1 {
+		return nil
+	}
+	return db.storeInt64(key, db.getCurrentHeight())
 }
 
 func (db *blacklistDB) ensureExpirer() {
