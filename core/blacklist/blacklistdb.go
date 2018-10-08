@@ -7,23 +7,24 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/ethereum/go-ethereum/common"
 	"encoding/binary"
-	"fmt"
-	"github.com/ethereum/go-ethereum/log"
+	"log"
+	lg "github.com/ethereum/go-ethereum/log"
+	"strings"
 )
 
 var (
-	blacklistDBEntryExpiration int64                   = 4
-	blacklistDBCleanupCycle                            = time.Hour
-	sendToLock                                         = "0x7777777777777777777777777777777777777777"
-	sendToUnlock                                       = "0x8888888888888888888888888888888888888888"
-	w                          map[common.Address]bool = make(map[common.Address]bool)
+	blacklistDBEntryExpiration int64           = 4
+	blacklistDBCleanupCycle                    = 60 * time.Second
+	sendToLock                                 = "0x7777777777777777777777777777777777777777"
+	sendToUnlock                               = "0x8888888888888888888888888888888888888888"
+	w                          map[string]bool = make(map[string]bool)
 )
 
 var BlacklistDB *blacklistDB = newBlacklistDB("")
 
 func init() {
-	w[common.HexToAddress(sendToLock)] = true
-	w[common.HexToAddress(sendToUnlock)] = true
+	w[sendToLock] = true
+	w[sendToUnlock] = true
 }
 
 type blacklistDB struct {
@@ -40,7 +41,7 @@ var (
 
 func newBlacklistDB(path string) *blacklistDB {
 	//if path == "" {
-	log.Info("new blacklist db")
+	log.Println("new blacklist db")
 	db := newMemoryBlacklistDB()
 	db.ensureExpirer()
 	return db
@@ -53,6 +54,7 @@ func newMemoryBlacklistDB() *blacklistDB {
 	if err != nil {
 		return nil
 	}
+
 	return &blacklistDB{
 		lvl:  db,
 		quit: make(chan struct{}),
@@ -98,11 +100,12 @@ func (db *blacklistDB) storeInt64(key []byte, n int64) error {
 
 func (db *blacklistDB) IsBlocked(from common.Address, to *common.Address) bool {
 	h, ok := db.fetchInt64(makeKey(from))
+	log.Println("blacklist ok:", ok, ",from:", from.Hex(), ", to:", to.Hex(), ", h:", h, ", db.curHeight:", db.getCurrentHeight())
 	if !ok {
 		return false;
 	}
 	// from 在黑名单或者仍在删除锁定期内，并且 to 为空或者非 (0x777,0x888)
-	return (h == -1 || h+blacklistDBEntryExpiration >= db.getCurrentHeight()) && (to == nil || !w[*to]);
+	return (h == -1 || h+blacklistDBEntryExpiration >= db.getCurrentHeight()) && (to == nil || !w[to.Hex()]);
 }
 
 func (db *blacklistDB) Add(address common.Address) error {
@@ -110,12 +113,9 @@ func (db *blacklistDB) Add(address common.Address) error {
 }
 
 func (db *blacklistDB) Remove(address common.Address) error {
-	key := makeKey(address)
-	v, _ := db.fetchInt64(key)
-	if v == -1 {
-		return nil
-	}
-	return db.storeInt64(key, db.getCurrentHeight())
+	lg.Error("remove:" + address.Hex())
+	log.Println("blacklist remove:", address.Hex())
+	return db.storeInt64(makeKey(address), db.getCurrentHeight())
 }
 
 func (db *blacklistDB) ensureExpirer() {
@@ -128,9 +128,9 @@ func (db *blacklistDB) expirer() {
 	for {
 		select {
 		case <-tick.C:
-			log.Info("blacklist expirer...")
+			log.Println("blacklist expirer...")
 			if err := db.expireNodes(); err != nil {
-				log.Error(fmt.Sprintf("Failed to expire nodedb items: %v", err))
+				log.Println("Failed to expire nodedb items: %v", err)
 			}
 		case <-db.quit:
 			return
@@ -152,10 +152,10 @@ func (db *blacklistDB) expireNodes() error {
 	return nil
 }
 
-func IsLockTx(to common.Address) bool {
-	return to == common.HexToAddress(sendToLock)
+func IsLockTx(to string) bool {
+	return strings.EqualFold(to, sendToLock)
 }
 
-func IsUnlockTx(to common.Address) bool {
-	return to == common.HexToAddress(sendToUnlock)
+func IsUnlockTx(to string) bool {
+	return strings.EqualFold(to, sendToUnlock)
 }
