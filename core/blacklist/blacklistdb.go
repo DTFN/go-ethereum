@@ -115,7 +115,7 @@ func (db *blacklistDB) Remove(address common.Address) error {
 	log.Println("blacklist remove:", address.Hex())
 	key := makeKey(address)
 	v, _ := db.fetchInt64(key)
-	if v == -1 {
+	if v != -1 {
 		return nil
 	}
 	return db.storeInt64(makeKey(address), db.getCurrentHeight())
