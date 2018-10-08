@@ -7,7 +7,6 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/ethereum/go-ethereum/common"
 	"encoding/binary"
-	"fmt"
 	"log"
 )
 
@@ -40,6 +39,7 @@ var (
 
 func newBlacklistDB(path string) *blacklistDB {
 	//if path == "" {
+	log.Println("new blacklist db")
 	db := newMemoryBlacklistDB()
 	db.ensureExpirer()
 	return db
@@ -111,6 +111,7 @@ func (db *blacklistDB) Add(address common.Address) error {
 }
 
 func (db *blacklistDB) Remove(address common.Address) error {
+	log.Println("blacklist remove:", address.Hex())
 	return db.storeInt64(makeKey(address), db.getCurrentHeight())
 }
 
@@ -126,7 +127,7 @@ func (db *blacklistDB) expirer() {
 		case <-tick.C:
 			log.Println("blacklist expirer...")
 			if err := db.expireNodes(); err != nil {
-				log.Println(fmt.Sprintf("Failed to expire nodedb items: %v", err))
+				log.Println("Failed to expire nodedb items: %v", err)
 			}
 		case <-db.quit:
 			return
