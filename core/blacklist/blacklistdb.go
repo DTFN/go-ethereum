@@ -40,6 +40,7 @@ var (
 
 func newBlacklistDB(path string) *blacklistDB {
 	//if path == "" {
+	log.Info("new blacklist db")
 	db := newMemoryBlacklistDB()
 	db.ensureExpirer()
 	return db
@@ -127,6 +128,7 @@ func (db *blacklistDB) expirer() {
 	for {
 		select {
 		case <-tick.C:
+			log.Info("blacklist expirer...")
 			if err := db.expireNodes(); err != nil {
 				log.Error(fmt.Sprintf("Failed to expire nodedb items: %v", err))
 			}
