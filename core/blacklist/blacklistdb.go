@@ -95,6 +95,7 @@ func (db *blacklistDB) storeInt64(key []byte, n int64) error {
 
 func (db *blacklistDB) IsBlocked(from common.Address, to *common.Address) bool {
 	h, ok := db.fetchInt64(makeKey(from))
+	fmt.Println("ok:", ok, ",from:", from.Hex(), ", to:", to.Hex(), ", h:", h, ", db.curHeight:", db.getCurrentHeight())
 	if !ok {
 		return false;
 	}
