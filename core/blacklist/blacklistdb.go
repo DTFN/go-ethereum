@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/core"
 	"errors"
 )
 
@@ -32,10 +31,10 @@ func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
 	db.SetState(address, lockInfoKey, common.BigToHash(height))
 }
 
-func Validate(evm *vm.EVM, msg core.Message) error {
-	h := evm.StateDB.GetState(msg.From(), lockInfoKey).Big().Int64()
+func Validate(evm *vm.EVM, from common.Address, to *common.Address) error {
+	h := evm.StateDB.GetState(from, lockInfoKey).Big().Int64()
 	locked := h == -1 || h+blacklistDBEntryExpiration >= blacklistDBEntryExpiration
-	forbiddenSendee := msg.To() == nil || !w[msg.To().Hex()]
+	forbiddenSendee := to == nil || !w[to.Hex()]
 	if locked && forbiddenSendee {
 		return errors.New("locked")
 	}
