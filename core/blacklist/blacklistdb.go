@@ -7,11 +7,11 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"errors"
-	"github.com/ethereum/go-ethereum/log"
+	"fmt"
 )
 
 var (
-	blacklistDBEntryExpiration int64           = 200
+	blacklistDBEntryExpiration int64           = 20
 	sendToLock                                 = "0x7777777777777777777777777777777777777777"
 	sendToUnlock                               = "0x8888888888888888888888888888888888888888"
 	w                          map[string]bool = make(map[string]bool)
@@ -30,7 +30,7 @@ func Lock(db *state.StateDB, address common.Address) {
 
 func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
 	if db.GetState(address, lockInfoKey).Big().Int64() == -1 {
-		log.Info("unlock ...", address, height)
+		fmt.Println("unlock ...", address, height)
 		db.SetState(address, lockInfoKey, common.BigToHash(height))
 	}
 }
