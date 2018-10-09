@@ -1,157 +1,43 @@
 package blacklist
 
 import (
-	"time"
-	"github.com/syndtr/goleveldb/leveldb"
-	"sync"
-	"github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/ethereum/go-ethereum/common"
-	"encoding/binary"
-	"log"
 	"strings"
+	"math/big"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/core"
+	"errors"
 )
 
 var (
 	blacklistDBEntryExpiration int64           = 4
-	blacklistDBCleanupCycle                    = 60 * time.Second
 	sendToLock                                 = "0x7777777777777777777777777777777777777777"
 	sendToUnlock                               = "0x8888888888888888888888888888888888888888"
 	w                          map[string]bool = make(map[string]bool)
+	lockInfoKey                                = common.BytesToHash([]byte("LOCK_INFO"))
+	lockInfoValue                              = common.BigToHash(big.NewInt(-1))
 )
-
-var BlacklistDB *blacklistDB = newBlacklistDB("")
 
 func init() {
 	w[sendToLock] = true
 	w[sendToUnlock] = true
 }
 
-type blacklistDB struct {
-	lvl           *leveldb.DB
-	runner        sync.Once
-	quit          chan struct{}
-	currentHeight int64
-	sync.RWMutex
+func Lock(db *state.StateDB, address common.Address) {
+	db.SetState(address, lockInfoKey, lockInfoValue)
 }
 
-var (
-	blacklistDBItemPrefix = "b:"
-)
-
-func newBlacklistDB(path string) *blacklistDB {
-	//if path == "" {
-	//log.Println("new blacklist db")
-
-	db := newMemoryBlacklistDB()
-	db.ensureExpirer()
-	return db
-	//}
-	//return newPersistentBlacklistDB(path, version)
+func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
+	db.SetState(address, lockInfoKey, common.BigToHash(height))
 }
 
-func newMemoryBlacklistDB() *blacklistDB {
-	db, err := leveldb.Open(storage.NewMemStorage(), nil)
-	if err != nil {
-		return nil
-	}
-
-	return &blacklistDB{
-		lvl:  db,
-		quit: make(chan struct{}),
-	}
-}
-
-func makeKey(address common.Address) []byte {
-	return []byte(blacklistDBItemPrefix + address.Hex())
-}
-
-func (db *blacklistDB) SetCurrentHeight(height int64) {
-	if db.getCurrentHeight() == height {
-		return;
-	}
-	db.Lock()
-	defer db.Unlock()
-	db.currentHeight = height
-}
-
-func (db *blacklistDB) getCurrentHeight() int64 {
-	db.RLock()
-	defer db.RUnlock()
-	return db.currentHeight
-}
-
-func (db *blacklistDB) fetchInt64(key []byte) (int64, bool) {
-	blob, err := db.lvl.Get(key, nil)
-	if err != nil {
-		return 0, false
-	}
-	val, read := binary.Varint(blob)
-	if read <= 0 {
-		return 0, false
-	}
-	return val, true
-}
-
-func (db *blacklistDB) storeInt64(key []byte, n int64) error {
-	blob := make([]byte, binary.MaxVarintLen64)
-	blob = blob[:binary.PutVarint(blob, n)]
-	return db.lvl.Put(key, blob, nil)
-}
-
-func (db *blacklistDB) IsBlocked(from common.Address, to *common.Address) bool {
-	h, ok := db.fetchInt64(makeKey(from))
-	log.Println("blacklist ok:", ok, ",from:", from.Hex(), ", to:", to.Hex(), ", h:", h, ", db.curHeight:", db.getCurrentHeight())
-	if !ok {
-		return false;
-	}
-	// from 在黑名单或者仍在删除锁定期内，并且 to 为空或者非 (0x777,0x888)
-	return (h == -1 || h+blacklistDBEntryExpiration >= db.getCurrentHeight()) && (to == nil || !w[to.Hex()]);
-}
-
-func (db *blacklistDB) Add(address common.Address) error {
-	return db.storeInt64(makeKey(address), -1)
-}
-
-func (db *blacklistDB) Remove(address common.Address) error {
-	log.Println("blacklist remove:", address.Hex())
-	key := makeKey(address)
-	v, _ := db.fetchInt64(key)
-	if v != -1 {
-		return nil
-	}
-	return db.storeInt64(makeKey(address), db.getCurrentHeight())
-}
-
-func (db *blacklistDB) ensureExpirer() {
-	db.runner.Do(func() { go db.expirer() })
-}
-
-func (db *blacklistDB) expirer() {
-	tick := time.NewTicker(blacklistDBCleanupCycle)
-	defer tick.Stop()
-	for {
-		select {
-		case <-tick.C:
-			log.Println("blacklist expirer...")
-			if err := db.expireNodes(); err != nil {
-				log.Println("Failed to expire nodedb items: %v", err)
-			}
-		case <-db.quit:
-			return
-		}
-	}
-}
-
-func (db *blacklistDB) expireNodes() error {
-	it := db.lvl.NewIterator(nil, nil)
-	defer it.Release()
-	for it.Next() {
-		blob := it.Value()
-		val, _ := binary.Varint(blob)
-		if val == -1 || val+blacklistDBEntryExpiration > db.getCurrentHeight() {
-			continue
-		}
-		db.lvl.Delete(it.Key(), nil)
+func Validate(evm *vm.EVM, msg core.Message) error {
+	h := evm.StateDB.GetState(msg.From(), lockInfoKey).Big().Int64()
+	locked := h == -1 || h+blacklistDBEntryExpiration >= blacklistDBEntryExpiration
+	forbiddenSendee := msg.To() == nil || !w[msg.To().Hex()]
+	if locked && forbiddenSendee {
+		return errors.New("locked")
 	}
 	return nil
 }
