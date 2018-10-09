@@ -208,18 +208,17 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	)
 
 	if contractCreation {
-		if blacklist.BlacklistDB.IsBlocked(msg.From(), msg.To()) {
-			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-			vmerr = errors.New("locked")
-		} else {
+		vmerr = blacklist.Validate(st.evm, msg.From(), msg.To())
+		if vmerr == nil {
 			ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+		} else {
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		}
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-		if blacklist.BlacklistDB.IsBlocked(msg.From(), msg.To()) {
-			vmerr = errors.New("locked")
-		} else {
+		vmerr = blacklist.Validate(st.evm, msg.From(), msg.To())
+		if vmerr == nil {
 			ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 		}
 	}
