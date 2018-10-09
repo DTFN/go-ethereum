@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"errors"
 	"github.com/ethereum/go-ethereum/log"
+	"fmt"
 )
 
 var (
@@ -37,7 +38,7 @@ func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
 
 func Validate(evm *vm.EVM, from common.Address, to *common.Address) error {
 	h := evm.StateDB.GetState(from, lockInfoKey).Big().Int64()
-	log.Info("validate ...", from, h)
+	fmt.Println(evm.StateDB.GetState(from, lockInfoKey), "validate ...", from, h)
 	locked := h == -1 || h+blacklistDBEntryExpiration >= evm.BlockNumber.Int64()
 	forbiddenSendee := to == nil || !w[to.Hex()]
 	if locked && forbiddenSendee {
