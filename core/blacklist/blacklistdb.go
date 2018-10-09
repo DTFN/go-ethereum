@@ -8,24 +8,21 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 var (
-	blacklistDBEntryExpiration int64           = 20
-	sendToLock                                 = "0x7777777777777777777777777777777777777777"
-	sendToUnlock                               = "0x8888888888888888888888888888888888888888"
-	w                          map[string]bool = make(map[string]bool)
-	locked                                     = int64(^uint(0) >> 1) // max int64
-	lockInfoKey                                = common.BytesToHash([]byte("LOCK_INFO"))
-	lockInfoValue                              = common.BigToHash(big.NewInt(locked))
+	blacklistDBEntryExpiration int64 = 20
+	sendToLock                       = "0x7777777777777777777777777777777777777777"
+	sendToUnlock                     = "0x8888888888888888888888888888888888888888"
+	w                                = make(map[string]bool)
+	locked                           = int64(^uint(0) >> 1) // max int64
+	lockInfoKey                      = common.BytesToHash([]byte("LOCK_INFO"))
+	lockInfoValue                    = common.BigToHash(big.NewInt(locked))
 )
 
 func init() {
 	w[sendToLock] = true
 	w[sendToUnlock] = true
-	v, _ := rlp.EncodeToBytes(-1)
-	lockInfoValue = common.BytesToHash(v)
 }
 
 func Lock(db *state.StateDB, address common.Address) {
@@ -45,7 +42,12 @@ func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
 func Validate(evm *vm.EVM, from common.Address, to *common.Address) error {
 	h := evm.StateDB.GetState(from, lockInfoKey).Big().Int64()
 	if h != 0 {
-		locked := h == locked || h+blacklistDBEntryExpiration >= evm.BlockNumber.Int64()
+		fmt.Println("h:", h)
+		fmt.Println("locked:", locked)
+		fmt.Println("h==locked:", h == locked)
+		fmt.Println("h+blacklistDBEntryExpiration:", h+blacklistDBEntryExpiration)
+		fmt.Println("evm.BlockNumber.Int64():", evm.BlockNumber.Int64())
+		locked := h == locked || h+blacklistDBEntryExpiration <= evm.BlockNumber.Int64()
 		forbiddenSendee := to == nil || !w[to.Hex()]
 		if locked && forbiddenSendee {
 			return errors.New("locked")

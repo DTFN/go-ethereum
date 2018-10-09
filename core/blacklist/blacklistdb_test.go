@@ -15,7 +15,8 @@ func TestNewMemoryBlacklistDB(t *testing.T) {
 	hashes := common.Hash{}
 	fmt.Println(hashes)
 	fmt.Println(hashes.Big())
-	fmt.Println(hashes.Big().Int64())
-	u := int64(^uint(0) >> 1)
-	fmt.Println(common.BigToHash(big.NewInt(u)).Big().Int64())
+	locked = int64(^uint(0) >> 1) // max int64
+	lockInfoKey = common.BytesToHash([]byte("LOCK_INFO"))
+	lockInfoValue = common.BigToHash(big.NewInt(locked))
+	fmt.Println(lockInfoValue)
 }
