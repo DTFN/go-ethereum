@@ -210,9 +210,9 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	if contractCreation {
 		vmerr = blacklist.Validate(st.evm, msg.From(), msg.To())
 		if vmerr == nil {
-			//st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-			//} else {
 			ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+		} else {
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		}
 	} else {
 		// Increment the nonce for the next transaction
