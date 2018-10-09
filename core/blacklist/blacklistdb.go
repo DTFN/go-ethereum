@@ -40,7 +40,7 @@ var (
 
 func newBlacklistDB(path string) *blacklistDB {
 	//if path == "" {
-	log.Println("new blacklist db")
+	//log.Println("new blacklist db")
 
 	db := newMemoryBlacklistDB()
 	db.ensureExpirer()
