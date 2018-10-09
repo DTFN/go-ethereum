@@ -29,6 +29,9 @@ func Lock(db *state.StateDB, address common.Address) {
 }
 
 func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
+	fmt.Println(address.Hex())
+	fmt.Println("height", height)
+	fmt.Println(db.GetState(address, lockInfoKey).Big().Int64())
 	if db.GetState(address, lockInfoKey).Big().Int64() == -1 {
 		fmt.Println("unlock ...", address, height)
 		db.SetState(address, lockInfoKey, common.BigToHash(height))
