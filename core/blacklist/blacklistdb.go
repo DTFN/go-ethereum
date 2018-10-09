@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"errors"
-	"fmt"
 )
 
 var (
@@ -30,11 +29,7 @@ func Lock(db *state.StateDB, address common.Address) {
 }
 
 func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
-	fmt.Println(address.Hex())
-	fmt.Println("height", height)
-	fmt.Println(db.GetState(address, lockInfoKey).Big().Int64())
 	if db.GetState(address, lockInfoKey) == lockInfoValue {
-		fmt.Println("unlock ...", address, height)
 		db.SetState(address, lockInfoKey, common.BigToHash(height))
 	}
 }
@@ -42,14 +37,9 @@ func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
 func Validate(evm *vm.EVM, from common.Address, to *common.Address) error {
 	h := evm.StateDB.GetState(from, lockInfoKey).Big().Int64()
 	if h != 0 {
-		fmt.Println("h:", h)
-		fmt.Println("locked:", locked)
-		fmt.Println("h==locked:", h == locked)
-		fmt.Println("h+blacklistDBEntryExpiration:", h+blacklistDBEntryExpiration)
-		fmt.Println("evm.BlockNumber.Int64():", evm.BlockNumber.Int64())
-		locked := h == locked || h+blacklistDBEntryExpiration <= evm.BlockNumber.Int64()
+		l := (h == locked) || (h+blacklistDBEntryExpiration >= evm.BlockNumber.Int64())
 		forbiddenSendee := to == nil || !w[to.Hex()]
-		if locked && forbiddenSendee {
+		if l && forbiddenSendee {
 			return errors.New("locked")
 		}
 	}
