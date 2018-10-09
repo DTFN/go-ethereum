@@ -33,7 +33,7 @@ func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
 
 func Validate(evm *vm.EVM, from common.Address, to *common.Address) error {
 	h := evm.StateDB.GetState(from, lockInfoKey).Big().Int64()
-	locked := h == -1 || h+blacklistDBEntryExpiration >= blacklistDBEntryExpiration
+	locked := h == -1 || h+blacklistDBEntryExpiration >= evm.BlockNumber.Int64()
 	forbiddenSendee := to == nil || !w[to.Hex()]
 	if locked && forbiddenSendee {
 		return errors.New("locked")
