@@ -3,17 +3,20 @@ package blacklist
 import (
 	"testing"
 	"fmt"
-	"github.com/stretchr/testify/assert"
+	"github.com/ethereum/go-ethereum/common"
+	"math/big"
 )
-
-var db *blacklistDB
 
 func init() {
 	fmt.Println("init")
-	db = newBlacklistDB("")
 }
 
 func TestNewMemoryBlacklistDB(t *testing.T) {
-	db.SetCurrentHeight(100)
-	assert.Equal(t, int64(100), db.currentHeight)
+	hashes := common.Hash{}
+	fmt.Println(hashes)
+	fmt.Println(hashes.Big())
+	locked = int64(^uint(0) >> 1) // max int64
+	lockInfoKey = common.BytesToHash([]byte("LOCK_INFO"))
+	lockInfoValue = common.BigToHash(big.NewInt(locked))
+	fmt.Println(lockInfoValue)
 }
