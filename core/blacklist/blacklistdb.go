@@ -34,12 +34,18 @@ func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
 	}
 }
 
+func IsLock(stateDB *state.StateDB,currentHeight int64, addr common.Address) bool {
+	lockHeight := stateDB.GetState(addr, lockInfoKey).Big().Int64()
+	unlockPending := lockHeight+blacklistDBEntryExpiration >= currentHeight
+	return lockHeight != 0 && (lockHeight == locked || unlockPending)
+}
+
 func Validate(evm *vm.EVM, from common.Address, to *common.Address) error {
 	h := evm.StateDB.GetState(from, lockInfoKey).Big().Int64()
 	if h != 0 {
 		l := (h == locked) || (h+blacklistDBEntryExpiration >= evm.BlockNumber.Int64())
-		forbiddenSendee := to == nil || !w[to.Hex()]
-		if l && forbiddenSendee {
+		forbiddenDist := to == nil || !w[to.Hex()]
+		if l && forbiddenDist {
 			return errors.New("locked")
 		}
 	}
