@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	blacklistDBEntryExpiration int64 = 20
+	blacklistDBEntryExpiration int64 = 400
 	sendToLock                       = "0x7777777777777777777777777777777777777777"
 	sendToUnlock                     = "0x8888888888888888888888888888888888888888"
 	w                                = make(map[string]bool)
