@@ -118,8 +118,8 @@ func CalcGasLimit(parent *types.Block) uint64 {
 		from parentGasLimit * (2/3) parentGasUsed is.
 	*/
 	limit := parent.GasLimit() - decay + contrib
-	if limit < params.MinGasLimit {
-		limit = params.MinGasLimit
+	if limit < params.TargetGasLimit {
+		limit = params.TargetGasLimit
 	}
 	// however, if we're now below the target (TargetGasLimit) we increase the
 	// limit as much as we can (parentGasLimit / 1024 -1)
