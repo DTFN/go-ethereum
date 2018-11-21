@@ -1,12 +1,12 @@
 package blacklist
 
 import (
+	"errors"
 	"github.com/ethereum/go-ethereum/common"
-	"strings"
-	"math/big"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"errors"
+	"math/big"
+	"strings"
 )
 
 var (
@@ -34,7 +34,12 @@ func Unlock(db *state.StateDB, address common.Address, height *big.Int) {
 	}
 }
 
-func IsLock(stateDB *state.StateDB,currentHeight int64, addr common.Address) bool {
+func LockHeight(stateDB *state.StateDB, addr common.Address) int64 {
+	lockHeight := stateDB.GetState(addr, lockInfoKey).Big().Int64()
+	return lockHeight
+}
+
+func IsLock(stateDB *state.StateDB, currentHeight int64, addr common.Address) bool {
 	lockHeight := stateDB.GetState(addr, lockInfoKey).Big().Int64()
 	unlockPending := lockHeight+blacklistDBEntryExpiration >= currentHeight
 	return lockHeight != 0 && (lockHeight == locked || unlockPending)
