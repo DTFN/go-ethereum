@@ -108,9 +108,9 @@ type TxStatus uint
 
 const (
 	TxStatusUnknown  TxStatus = iota
-	TxStatusQueued
-	TxStatusPending
-	TxStatusIncluded
+	TxStatusQueued   
+	TxStatusPending  
+	TxStatusIncluded 
 )
 
 // blockChain provides the state of blockchain and current gas limit to do
@@ -277,6 +277,10 @@ func (pool *TxPool) loop() {
 
 	// Track the previous head headers for transaction reorgs
 	head := pool.chain.CurrentBlock()
+
+	go func() {
+		fmt.Println("eth.txPool.maxgas", pool.currentMaxGas)
+	}()
 
 	// Keep waiting for and reacting to the various events
 	for {
@@ -580,7 +584,6 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 // validateTx checks whether a transaction is valid according to the consensus
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
-	log.Info("pool.maxgas", pool.currentMaxGas)
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
 	if tx.Size() > 32*1024 {
 		return ErrOversizedData
