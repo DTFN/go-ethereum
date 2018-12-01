@@ -108,9 +108,9 @@ type TxStatus uint
 
 const (
 	TxStatusUnknown  TxStatus = iota
-	TxStatusQueued   
-	TxStatusPending  
-	TxStatusIncluded 
+	TxStatusQueued
+	TxStatusPending
+	TxStatusIncluded
 )
 
 // blockChain provides the state of blockchain and current gas limit to do
@@ -279,7 +279,10 @@ func (pool *TxPool) loop() {
 	head := pool.chain.CurrentBlock()
 
 	go func() {
-		fmt.Println("eth.txPool.maxgas", pool.currentMaxGas)
+		for {
+			fmt.Println("eth.txPool.maxgas", pool.currentMaxGas)
+			time.Sleep(1 * time.Second)
+		}
 	}()
 
 	// Keep waiting for and reacting to the various events
