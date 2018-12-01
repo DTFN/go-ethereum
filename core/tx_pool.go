@@ -278,13 +278,6 @@ func (pool *TxPool) loop() {
 	// Track the previous head headers for transaction reorgs
 	head := pool.chain.CurrentBlock()
 
-	go func() {
-		for {
-			fmt.Println("eth.txPool.maxgas", pool.currentMaxGas)
-			time.Sleep(1 * time.Second)
-		}
-	}()
-
 	// Keep waiting for and reacting to the various events
 	for {
 		select {
@@ -442,7 +435,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	}
 	pool.currentState = statedb
 	pool.pendingState = state.ManageState(statedb)
-	pool.currentMaxGas = newHead.GasLimit
+	//pool.currentMaxGas = newHead.GasLimit
 
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
