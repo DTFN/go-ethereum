@@ -257,6 +257,10 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	return pool
 }
 
+func (pool *TxPool) GetTxpoolChainHeadSize() int{
+	return len(pool.chainHeadCh)
+}
+
 // loop is the transaction pool's main event loop, waiting for and reacting to
 // outside blockchain events as well as for various reporting and transaction
 // eviction events.
