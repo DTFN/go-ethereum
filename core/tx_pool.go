@@ -107,7 +107,7 @@ var (
 type TxStatus uint
 
 const (
-	TxStatusUnknown TxStatus = iota
+	TxStatusUnknown  TxStatus = iota
 	TxStatusQueued
 	TxStatusPending
 	TxStatusIncluded
@@ -293,11 +293,11 @@ func (pool *TxPool) loop() {
 
 				pool.mu.Unlock()
 			}
-		// Be unsubscribed due to system stopped
+			// Be unsubscribed due to system stopped
 		case <-pool.chainHeadSub.Err():
 			return
 
-		// Handle stats reporting ticks
+			// Handle stats reporting ticks
 		case <-report.C:
 			pool.mu.RLock()
 			pending, queued := pool.stats()
@@ -309,7 +309,7 @@ func (pool *TxPool) loop() {
 				prevPending, prevQueued, prevStales = pending, queued, stales
 			}
 
-		// Handle inactive account transaction eviction
+			// Handle inactive account transaction eviction
 		case <-evict.C:
 			pool.mu.Lock()
 			for addr := range pool.queue {
@@ -326,7 +326,7 @@ func (pool *TxPool) loop() {
 			}
 			pool.mu.Unlock()
 
-		// Handle local transaction journal rotation
+			// Handle local transaction journal rotation
 		case <-journal.C:
 			if pool.journal != nil {
 				pool.mu.Lock()
@@ -337,6 +337,32 @@ func (pool *TxPool) loop() {
 			}
 		}
 	}
+}
+
+func (pool *TxPool) CopyPendingState() *state.StateDB {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	pendingState := state.ManageState(pool.currentState)
+
+	for addr, list := range pool.pending {
+		txs := list.Flatten() // Heavy but will be cached and is needed by the miner anyway
+		pendingState.SetNonce(addr, txs[len(txs)-1].Nonce()+1)
+	}
+	return pendingState.StateDB
+}
+
+func (pool *TxPool) CopyPendingStateToCurPos() *state.StateDB {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	pendingState := state.ManageState(pool.currentState)
+
+	for addr, list := range pool.pending {
+		txs := list.Flatten() // Heavy but will be cached and is needed by the miner anyway
+		pendingState.SetNonce(addr, txs[len(txs)-1].Nonce()+1)
+	}
+	return pendingState.StateDB
 }
 
 // lockedReset is a wrapper around reset to allow calling it in a thread safe
@@ -409,7 +435,9 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	}
 	pool.currentState = statedb
 	pool.pendingState = state.ManageState(statedb)
-	pool.currentMaxGas = newHead.GasLimit
+	if pool.currentMaxGas == 0 {
+		pool.currentMaxGas = newHead.GasLimit
+	}
 
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
@@ -655,7 +683,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
 
 		// We've directly injected a replacement transaction, notify subsystems
-		go pool.txFeed.Send(TxPreEvent{tx})
+		pool.txFeed.Send(TxPreEvent{tx}) //leilei delete go routine call for ethermint checkTx
 
 		return old != nil, nil
 	}
@@ -749,7 +777,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
 
-	go pool.txFeed.Send(TxPreEvent{tx})
+	pool.txFeed.Send(TxPreEvent{tx}) //leilei delete go routine call for ethermint checkTx
 }
 
 // AddLocal enqueues a single transaction into the pool if it is valid, marking
@@ -905,22 +933,19 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	}
 }
 
-
 func (pool *TxPool) RemoveTxs(hashes []common.Hash) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	for _, hash := range hashes {
-		pool.removeTx(hash,true)
+		pool.removeTx(hash, true)
 	}
 }
 
 func (pool *TxPool) RemoveTx(hash common.Hash) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	pool.removeTx(hash,true)
+	pool.removeTx(hash, true)
 }
-
-
 
 // promoteExecutables moves transactions that have become processable from the
 // future queue to the set of pending transactions. During this process, all
