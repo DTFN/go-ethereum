@@ -104,5 +104,5 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 // CalcGasLimit computes the gas limit of the next block after parent.
 // This is miner strategy, not consensus protocol.
 func CalcGasLimit(parent *types.Block) uint64 {
-	return 8611788139815
+	return 8796093022208
 }
