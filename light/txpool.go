@@ -113,9 +113,6 @@ func (pool *TxPool) currentState(ctx context.Context) *state.StateDB {
 	return NewState(ctx, pool.chain.CurrentHeader(), pool.odr)
 }
 
-func (pool *TxPool) GetUnreadChainHeadEvent() int{
-	return len(pool.chainHeadCh)
-}
 
 // GetNonce returns the "pending" nonce of a given address. It always queries
 // the nonce belonging to the latest header too in order to detect if another

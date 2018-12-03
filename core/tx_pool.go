@@ -339,6 +339,7 @@ func (pool *TxPool) loop() {
 	}
 }
 
+
 func (pool *TxPool) CopyPendingState() *state.StateDB {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
