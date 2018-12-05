@@ -819,15 +819,20 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	defer pool.mu.Unlock()
 
 	// Try to inject the transaction and update any state
+	fmt.Println("@@before pool add tx")
 	replace, err := pool.add(tx, local)
+	fmt.Println("@@end pool add tx")
 	if err != nil {
 		return err
 	}
 	// If we added a new transaction, run promotion checks and return
 	if !replace {
 		from, _ := types.Sender(pool.signer, tx) // already validated
+		fmt.Println("@@ begin promote executables")
 		pool.promoteExecutables([]common.Address{from})
+		fmt.Println("@@ end promote executables")
 	}
+
 	return nil
 }
 
