@@ -149,10 +149,10 @@ var DefaultTxPoolConfig = TxPoolConfig{
 	PriceLimit: 1,
 	PriceBump:  10,
 
-	AccountSlots: 16,
-	GlobalSlots:  4096,
-	AccountQueue: 64,
-	GlobalQueue:  1024,
+	AccountSlots: 32,
+	GlobalSlots:  409600,
+	AccountQueue: 128,
+	GlobalQueue:  102400,
 
 	Lifetime: 3 * time.Hour,
 }
@@ -781,7 +781,6 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	// Set the potentially new pending nonce and notify any subsystems of the new tx
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
-
 	pool.txFeed.Send(TxPreEvent{tx}) //leilei delete go routine call for ethermint checkTx
 }
 
@@ -819,18 +818,14 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	defer pool.mu.Unlock()
 
 	// Try to inject the transaction and update any state
-	fmt.Println("@@before pool add tx")
 	replace, err := pool.add(tx, local)
-	fmt.Println("@@end pool add tx")
 	if err != nil {
 		return err
 	}
 	// If we added a new transaction, run promotion checks and return
 	if !replace {
 		from, _ := types.Sender(pool.signer, tx) // already validated
-		fmt.Println("@@ begin promote executables")
 		pool.promoteExecutables([]common.Address{from})
-		fmt.Println("@@ end promote executables")
 	}
 
 	return nil
@@ -990,6 +985,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 			pool.priced.Removed()
 			queuedNofundsCounter.Inc(1)
 		}
+
 		// Gather all executable transactions and promote them
 		for _, tx := range list.Ready(pool.pendingState.GetNonce(addr)) {
 			hash := tx.Hash()
