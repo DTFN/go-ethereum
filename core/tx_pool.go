@@ -629,6 +629,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	return nil
 }
 func (pool *TxPool) ValidateExist(hash common.Hash)  bool {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
 	// If the transaction is already known, return true
 	if pool.all[hash] != nil {
 		return true
