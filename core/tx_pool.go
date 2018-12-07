@@ -628,6 +628,14 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	return nil
 }
+func (pool *TxPool) ValidateExist(hash common.Hash)  bool {
+	// If the transaction is already known, discard it
+	if pool.all[hash] != nil {
+		return true
+	}else{
+		return false
+	}
+}
 
 // add validates a transaction and inserts it into the non-executable queue for
 // later pending promotion and execution. If the transaction is a replacement for
