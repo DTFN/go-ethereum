@@ -107,7 +107,7 @@ func (posTable *PosTable) InitStruct() {
 			Signer: signer,
 			Slots:  posItem.Slots,
 		}
-		posTable.SortedPosItems.Push(&posItemWithSigner)
+		posTable.SortedPosItems.insert(&posItemWithSigner)
 		posTable.PosItemIndexMap[signer] = &posItemWithSigner
 		totalSlots += posItem.Slots
 
@@ -150,7 +150,7 @@ func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) erro
 		Signer: signer,
 		Slots:  pi.Slots,
 	}
-	posTable.SortedPosItems.Push(&posItemWithSigner)
+	posTable.SortedPosItems.insert(&posItemWithSigner)
 	posTable.PosItemIndexMap[signer] = &posItemWithSigner
 	posTable.TotalSlots += pi.Slots
 
@@ -351,8 +351,9 @@ func (pq *PosItemSortedQueue) Pop() interface{} {
 	return item
 }
 
-func (pq *PosItemSortedQueue) insert(item *PosItem) {
+func (pq *PosItemSortedQueue) insert(item *PosItemWithSigner) {
 	heap.Push(pq, item)
+	heap.Fix(pq, item.index)
 }
 
 // update modifies the priority and value of an Item in the queue.
