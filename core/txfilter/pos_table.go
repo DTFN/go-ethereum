@@ -20,8 +20,8 @@ var (
 	EthPosTable *PosTable
 )
 
-func CreatePosTable(threshold *big.Int) *PosTable {
-	EthPosTable = NewPosTable(threshold)
+func CreatePosTable() *PosTable {
+	EthPosTable = NewPosTable()
 	return EthPosTable
 }
 
@@ -38,12 +38,10 @@ type PosTable struct {
 	SortedUnbondPosItems    *UnbondPosItemSortedQueue             `json:"-"`
 	UnbondPosItemIndexMap   map[common.Address]*PosItemWithSigner `json:"-"`
 	Threshold               *big.Int                              `json:"threshold"` // threshold value of PosTable
-	ChangedFlagThisBlock    bool
+	ChangedFlagThisBlock    bool                                  `json:"-"`
 }
 
-func NewPosTable(threshold *big.Int) *PosTable {
-	copyThreashold := big.Int{}
-	copyThreashold.Set(threshold)
+func NewPosTable() *PosTable {
 	return &PosTable{
 		PosItemMap:              make(map[common.Address]*PosItem),
 		UnbondPosItemMap:        make(map[common.Address]*PosItem),
@@ -54,7 +52,6 @@ func NewPosTable(threshold *big.Int) *PosTable {
 		SortedUnbondPosItems:    NewUnbondPosItemSortedQueue(),
 		UnbondPosItemIndexMap:   make(map[common.Address]*PosItemWithSigner),
 		TotalSlots:              0,
-		Threshold:               &copyThreashold,
 		ChangedFlagThisBlock:    false,
 	}
 }
@@ -65,7 +62,7 @@ func (posTable *PosTable) Copy() *PosTable {
 	/*	posByte, _ := json.Marshal(posTable)
 		newPosTable := NewPosTable(posTable.Threshold)
 		json.Unmarshal(posByte, &newPosTable)*/
-	newPosTable := NewPosTable(posTable.Threshold)
+	newPosTable := NewPosTable()
 	for signer, posItem := range posTable.PosItemMap {
 		newPosTable.PosItemMap[signer] = posItem.Copy()
 	}
@@ -127,13 +124,17 @@ func (posTable *PosTable) InitStruct() {
 		}
 		posTable.SortedUnbondPosItems.Push(&posItemWithSigner)
 		posTable.UnbondPosItemIndexMap[signer] = &posItemWithSigner
+
+		posTable.TmAddressToSignerMap[posItem.TmAddress] = signer
+		posTable.BlsKeyStringToSignerMap[posItem.BlsKeyString] = signer
 	}
+	posTable.InitFlag = true
 }
 
 func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) error {
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()
-	posTable.ChangedFlagThisBlock=true
+	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
 		if pi.Slots <= existedItem.Slots {
 			panic(fmt.Sprintf("locked signer %v balance decreased", signer))
@@ -162,7 +163,7 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) err
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
-		posTable.ChangedFlagThisBlock=true
+		posTable.ChangedFlagThisBlock = true
 		if len(posTable.PosItemMap)-len(posTable.UnbondPosItemMap) <= 4 {
 			return fmt.Errorf("cannot remove validator for consensus safety")
 		}

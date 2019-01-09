@@ -671,7 +671,6 @@ func (db *StateDB) InitPosTable() {
 				panic(fmt.Sprintf("initialize NextEpochValData.PosTable error %v", err))
 			}
 		}
-		txfilter.EthPosTable.InitFlag = true
 	} else {
 		panic("posTable == nil, cannot initialize")
 	}

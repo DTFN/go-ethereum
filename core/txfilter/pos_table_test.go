@@ -1,6 +1,14 @@
 package txfilter
 
-/*
+import (
+	"github.com/stretchr/testify/require"
+	"github.com/ethereum/go-ethereum/common"
+	abciTypes "github.com/tendermint/tendermint/abci/types"
+	"fmt"
+	"testing"
+	"math/big"
+)
+
 func TestUpsertandRemovePosTable(t *testing.T) {
 	//手动构造Postable
 	table := NewPosTable(big.NewInt(1000))
@@ -20,25 +28,34 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	Address2 := common.HexToAddress("0x0000000000000000000000000000000000000002")
 	Address3 := common.HexToAddress("0x0000000000000000000000000000000000000003")
 	Address4 := common.HexToAddress("0x0000000000000000000000000000000000000004")
+	tmAddress1 := "fake tmAddress1"
+	tmAddress2 := "fake tmAddress2"
+	tmAddress3 := "fake tmAddress3"
+	tmAddress4 := "fake tmAddress4"
+
+	BlsKeyString1 := "fake blsKeyString1"
+	BlsKeyString2 := "fake blsKeyString2"
+	BlsKeyString3 := "fake blsKeyString3"
+	BlsKeyString4 := "fake blsKeyString4"
 	Indexes1 := map[int]bool{}
 	Indexes2 := map[int]bool{}
-	PosItem1 := PosItem{
-		false,
-		big.NewInt(0),
+	PosItem1 := NewPosItem(
+		100,
+		0,
 		PubKey1,
-		Indexes1,
-		big.NewInt(0),
-	}
-	PosItem2 := PosItem{
-		false,
-		big.NewInt(0),
+		tmAddress1,
+		BlsKeyString1,
+		Address1)
+	PosItem2 := NewPosItem(
+		100,
+		0,
 		PubKey2,
-		Indexes2,
-		big.NewInt(0),
-	}
+		tmAddress2,
+		BlsKeyString2,
+		Address2)
 	var PosItemMap = map[common.Address]*PosItem{
-		Address1: &PosItem1,
-		Address2: &PosItem2,
+		Address1: PosItem1,
+		Address2: PosItem2,
 	}
 	table.PosItemMap = PosItemMap
 
@@ -182,4 +199,3 @@ func TestSelectItemBySeedValue(t *testing.T) {
 	fmt.Print("结果情况Address4:", list[Address4])
 
 }
-*/
