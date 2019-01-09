@@ -66,11 +66,11 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, 0, table.PosItemIndexMap[Address2].index)
 	require.Equal(t, 1, table.PosItemIndexMap[Address1].index)
 	require.Equal(t, int64(10), table.PosItemMap[Address1].Slots)
-	signers:=table.SortedSigners()
-	require.Equal(t, signers[0], Address2)
-	require.Equal(t, signers[1], Address1)
+	table.ExportSortedSigners()
+	require.Equal(t, table.SortedSigners[0], Address2)
+	require.Equal(t, table.SortedSigners[1], Address1)
 
-	PosItem1Copy:=PosItem1.Copy()
+	PosItem1Copy := PosItem1.Copy()
 	PosItem1Copy.Slots = 90
 	err = table.UpsertPosItem(Address1, PosItem1Copy)
 	require.NoError(t, nil, err)
@@ -78,9 +78,9 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, 0, table.PosItemIndexMap[Address1].index)
 	require.Equal(t, 1, table.PosItemIndexMap[Address2].index)
 	require.Equal(t, int64(90), table.PosItemMap[Address1].Slots)
-	signers=table.SortedSigners()
-	require.Equal(t, signers[0], Address1)
-	require.Equal(t, signers[1], Address2)
+	table.ExportSortedSigners()
+	require.Equal(t, table.SortedSigners[0], Address1)
+	require.Equal(t, table.SortedSigners[1], Address2)
 
 	PosItem3 := NewPosItem(
 		110,
@@ -98,10 +98,10 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, 2, table.PosItemIndexMap[Address3].index)
 	require.Equal(t, int64(90), table.PosItemMap[Address1].Slots)
 	require.Equal(t, int64(51), table.PosItemMap[Address3].Slots)
-	signers=table.SortedSigners()
-	require.Equal(t, signers[0], Address1)
-	require.Equal(t, signers[1], Address3)
-	require.Equal(t, signers[2], Address2)
+	table.ExportSortedSigners()
+	require.Equal(t, table.SortedSigners[0], Address1)
+	require.Equal(t, table.SortedSigners[1], Address3)
+	require.Equal(t, table.SortedSigners[2], Address2)
 
 	PosItem4 := NewPosItem(
 		120,
@@ -114,17 +114,17 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	err = table.UpsertPosItem(Address4, PosItem4)
 	require.Equal(t, int64(182), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address1].index)
-	require.Equal(t, 1, table.PosItemIndexMap[Address4].index)	//2 swap with 4
+	require.Equal(t, 1, table.PosItemIndexMap[Address4].index) //2 swap with 4
 	require.Equal(t, 2, table.PosItemIndexMap[Address3].index)
 	require.Equal(t, 3, table.PosItemIndexMap[Address2].index)
 	require.Equal(t, int64(90), table.PosItemMap[Address1].Slots)
 	require.Equal(t, int64(51), table.PosItemMap[Address3].Slots)
 	require.Equal(t, int64(30), table.PosItemMap[Address4].Slots)
-	signers=table.SortedSigners()
-	require.Equal(t, signers[0], Address1)
-	require.Equal(t, signers[1], Address3)
-	require.Equal(t, signers[2], Address4)
-	require.Equal(t, signers[3], Address2)
+	table.ExportSortedSigners()
+	require.Equal(t, table.SortedSigners[0], Address1)
+	require.Equal(t, table.SortedSigners[1], Address3)
+	require.Equal(t, table.SortedSigners[2], Address4)
+	require.Equal(t, table.SortedSigners[3], Address2)
 
 	/*	for i := 25; i < 45; i++ {
 			require.Equal(t, Address1, table.PosArray[i])

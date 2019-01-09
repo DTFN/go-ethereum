@@ -26,19 +26,23 @@ func CreatePosTable() *PosTable {
 }
 
 type PosTable struct {
-	Mtx                     sync.RWMutex                          `json:"-"`
-	InitFlag                bool                                  `json:"-"`
-	PosItemMap              map[common.Address]*PosItem           `json:"pos_item_map"`
-	SortedPosItems          *PosItemSortedQueue                   `json:"-"`
-	PosItemIndexMap         map[common.Address]*PosItemWithSigner `json:"-"`
-	TmAddressToSignerMap    map[string]common.Address             `json:"-"`
-	BlsKeyStringToSignerMap map[string]common.Address             `json:"-"`
-	TotalSlots              int64                                 `json:"-"`
-	UnbondPosItemMap        map[common.Address]*PosItem           `json:"unbond_pos_item_map"`
-	SortedUnbondPosItems    *UnbondPosItemSortedQueue             `json:"-"`
-	UnbondPosItemIndexMap   map[common.Address]*PosItemWithSigner `json:"-"`
-	Threshold               *big.Int                              `json:"threshold"` // threshold value of PosTable
-	ChangedFlagThisBlock    bool                                  `json:"-"`
+	Mtx             sync.RWMutex                          `json:"-"`
+	InitFlag        bool                                  `json:"-"`
+	PosItemMap      map[common.Address]*PosItem           `json:"pos_item_map"`
+	SortedPosItems  *PosItemSortedQueue                   `json:"-"`
+	PosItemIndexMap map[common.Address]*PosItemWithSigner `json:"-"`
+	TotalSlots      int64                                 `json:"-"`
+	SortedSigners   []common.Address                      `json:"-"`
+
+	UnbondPosItemMap      map[common.Address]*PosItem           `json:"unbond_pos_item_map"`
+	SortedUnbondPosItems  *UnbondPosItemSortedQueue             `json:"-"`
+	UnbondPosItemIndexMap map[common.Address]*PosItemWithSigner `json:"-"`
+	SortedUnbondSigners   []common.Address                      `json:"-"`
+
+	TmAddressToSignerMap    map[string]common.Address `json:"-"`
+	BlsKeyStringToSignerMap map[string]common.Address `json:"-"`
+	Threshold               *big.Int                  `json:"threshold"` // threshold value of PosTable
+	ChangedFlagThisBlock    bool                      `json:"-"`
 }
 
 func NewPosTable() *PosTable {
@@ -128,6 +132,7 @@ func (posTable *PosTable) InitStruct() {
 		posTable.TmAddressToSignerMap[posItem.TmAddress] = signer
 		posTable.BlsKeyStringToSignerMap[posItem.BlsKeyString] = signer
 	}
+	posTable.ExportSortedSigners()
 	posTable.InitFlag = true
 }
 
@@ -191,18 +196,18 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64) int {
 	count := 0
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()
-	for _, posItemWithSigner := range *posTable.SortedUnbondPosItems {
-		if (posItemWithSigner.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks <= currentHeight {
-			posItem, ok := posTable.UnbondPosItemMap[posItemWithSigner.Signer]
-			if !ok {
-				panic(fmt.Sprintf("PosTable UnbondPosItemMap mismatch with SortedUnbondPosItems. %v ", posTable))
-			}
+	for _, signer := range posTable.SortedUnbondSigners {
+		posItem, ok := posTable.UnbondPosItemMap[signer]
+		if !ok {
+			panic(fmt.Sprintf("PosTable UnbondPosItemMap mismatch with SortedUnbondPosItems. %v ", posTable))
+		}
+		if (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks <= currentHeight {
 			if len(posTable.PosItemMap)-1 <= 4 {
 				panic("cannot remove validator for consensus safety")
 			}
-			delete(posTable.UnbondPosItemMap, posItemWithSigner.Signer)
-			delete(posTable.UnbondPosItemIndexMap, posItemWithSigner.Signer)
-			posTable.SortedUnbondPosItems.remove(posTable.UnbondPosItemIndexMap[posItemWithSigner.Signer].index)
+			delete(posTable.UnbondPosItemMap, signer)
+			delete(posTable.UnbondPosItemIndexMap, signer)
+			posTable.SortedUnbondPosItems.remove(posTable.UnbondPosItemIndexMap[signer].index)
 
 			delete(posTable.TmAddressToSignerMap, posItem.TmAddress)
 			delete(posTable.BlsKeyStringToSignerMap, posItem.BlsKeyString)
@@ -214,15 +219,24 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64) int {
 	return count
 }
 
-func (posTable *PosTable) SortedSigners() []common.Address {
-	topKSigners := []common.Address{}
+func (posTable *PosTable) ExportSortedSigners() {
+	sortedSigners := []common.Address{}
 	copyQueue := posTable.SortedPosItems.Copy()
-	len := len(*copyQueue)
-	for i := 0; i < len; i++ {
+	length := len(*copyQueue)
+	for i := 0; i < length; i++ {
 		posItemWithSigner := heap.Pop(copyQueue).(*PosItemWithSigner)
-		topKSigners = append(topKSigners, posItemWithSigner.Signer)
+		sortedSigners = append(sortedSigners, posItemWithSigner.Signer)
 	}
-	return topKSigners
+	posTable.SortedSigners = sortedSigners
+
+	sortedUnbondSigners := []common.Address{}
+	copyUnbondQueue := posTable.SortedUnbondPosItems.Copy()
+	length = len(*copyUnbondQueue)
+	for i := 0; i < length; i++ {
+		posItemWithSigner := heap.Pop(copyUnbondQueue).(*PosItemWithSigner)
+		sortedUnbondSigners = append(sortedUnbondSigners, posItemWithSigner.Signer)
+	}
+	posTable.SortedUnbondSigners = sortedUnbondSigners
 }
 
 func (posTable *PosTable) TopKSigners(k int) []common.Address {
@@ -243,8 +257,7 @@ func (posTable *PosTable) SelectItemByHeightValue(random int64) (common.Address,
 	r := rand.New(rand.NewSource(random))
 	index := int64(r.Intn(int(posTable.TotalSlots)))
 	sumSlots := int64(0)
-	signers := posTable.SortedSigners()
-	for _, signer := range signers {
+	for _, signer := range posTable.SortedSigners {
 		posItem := posTable.PosItemMap[signer]
 		sumSlots += posItem.Slots
 		if sumSlots >= index {
@@ -259,8 +272,7 @@ func (posTable *PosTable) SelectItemBySeedValue(vrf []byte, len int) (common.Add
 	r := rand.New(rand.NewSource(int64(res64) + int64(len)))
 	index := int64(r.Intn(int(posTable.TotalSlots)))
 	sumSlots := int64(0)
-	signers := posTable.SortedSigners()
-	for _, signer := range signers {
+	for _, signer := range posTable.SortedSigners {
 		posItem := posTable.PosItemMap[signer]
 		sumSlots += posItem.Slots
 		if sumSlots >= index {
@@ -343,7 +355,7 @@ func (pq *PosItemSortedQueue) Copy() *PosItemSortedQueue {
 
 func (pq *PosItemSortedQueue) Len() int { return len(*pq) }
 
-func (pq *PosItemSortedQueue) Less(i, j int) bool {
+func (pq *PosItemSortedQueue) Less(i, j int) bool {	 //Max-heap
 	if (*pq)[i].Slots != (*pq)[j].Slots {
 		return (*pq)[i].Slots > (*pq)[j].Slots
 	}
@@ -408,11 +420,11 @@ func (pq *UnbondPosItemSortedQueue) Copy() *UnbondPosItemSortedQueue {
 
 func (pq *UnbondPosItemSortedQueue) Len() int { return len(*pq) }
 
-func (pq *UnbondPosItemSortedQueue) Less(i, j int) bool {
+func (pq *UnbondPosItemSortedQueue) Less(i, j int) bool { //Min-heap
 	if (*pq)[i].Height != (*pq)[j].Height {
-		return (*pq)[i].Height > (*pq)[j].Height
+		return (*pq)[i].Height < (*pq)[j].Height
 	}
-	return (*pq)[i].Signer.String() > (*pq)[j].Signer.String()
+	return (*pq)[i].Signer.String() < (*pq)[j].Signer.String()
 }
 
 func (pq *UnbondPosItemSortedQueue) Swap(i, j int) {
