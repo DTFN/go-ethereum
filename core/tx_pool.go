@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	"github.com/ethereum/go-ethereum/core/txfilter"
 )
 
 const (
@@ -78,6 +79,9 @@ var (
 	// than some meaningful limit a user might use. This is not a consensus error
 	// making the transaction invalid, rather a DOS protection.
 	ErrOversizedData = errors.New("oversized data")
+
+	// ErrBlockedSender is returned if the sender is some specific address or already bet for validators
+	ErrBlockedSender = errors.New("locked sender")
 )
 
 var (
@@ -257,7 +261,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	return pool
 }
 
-func (pool *TxPool) GetTxpoolChainHeadSize() int{
+func (pool *TxPool) GetTxpoolChainHeadSize() int {
 	return len(pool.chainHeadCh)
 }
 
@@ -342,7 +346,6 @@ func (pool *TxPool) loop() {
 		}
 	}
 }
-
 
 func (pool *TxPool) CopyPendingState() *state.StateDB {
 	pool.mu.Lock()
@@ -605,6 +608,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return ErrInvalidSender
 	}
+	err = txfilter.IsBlocked(from, *tx.To(), pool.currentState.GetBalance(from), tx.Data())
+	if err != nil {
+		return err
+	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
 	if !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
@@ -628,13 +635,13 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	return nil
 }
-func (pool *TxPool) ValidateExist(hash common.Hash)  bool {
+func (pool *TxPool) ValidateExist(hash common.Hash) bool {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
 	// If the transaction is already known, return true
 	if pool.all[hash] != nil {
 		return true
-	}else{
+	} else {
 		return false
 	}
 }

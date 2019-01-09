@@ -159,6 +159,10 @@ func (c *stateObject) getTrie(db Database) Trie {
 	return c.trie
 }
 
+func (c *stateObject) GetTrie(db Database) Trie {
+	return c.getTrie(db)
+}
+
 // GetState returns a value in account storage.
 func (self *stateObject) GetState(db Database, key common.Hash) common.Hash {
 	value, exists := self.cachedStorage[key]

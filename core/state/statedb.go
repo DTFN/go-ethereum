@@ -29,6 +29,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/core/txfilter"
+	"encoding/json"
 )
 
 type revision struct {
@@ -650,4 +652,27 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	})
 	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
 	return root, err
+}
+
+func (db *StateDB) InitPosTable() {
+	if txfilter.EthPosTable != nil {
+		txfilter.EthPosTable.Mtx.Lock()
+		defer txfilter.EthPosTable.Mtx.Unlock()
+		nextEpochDataAddress := common.HexToAddress("0x8888888888888888888888888888888888888888")
+		log.Info("Read NextEpochValData")
+		nextBytes := db.GetCode(nextEpochDataAddress)
+		if len(nextBytes) == 0 {
+			// no predata existed
+			log.Info("no pre NextEpochValData.PosTable")
+		} else {
+			log.Info("NextEpochValData.PosTable Not nil")
+			err := json.Unmarshal(nextBytes, txfilter.EthPosTable)
+			if err != nil {
+				panic(fmt.Sprintf("initialize NextEpochValData.PosTable error %v", err))
+			}
+		}
+		txfilter.EthPosTable.InitFlag = true
+	} else {
+		panic("posTable == nil, cannot initialize")
+	}
 }

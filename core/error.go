@@ -26,7 +26,7 @@ var (
 	// by a transaction is higher than what's left in the block.
 	ErrGasLimitReached = errors.New("gas limit reached")
 
-	// ErrBlacklistedHash is returned if a block to import is on the blacklist.
+	// ErrBlacklistedHash is returned if a block to import is on the txfilter.
 	ErrBlacklistedHash = errors.New("blacklisted hash")
 
 	// ErrNonceTooHigh is returned if the nonce of a transaction is higher than the
