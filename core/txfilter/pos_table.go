@@ -245,8 +245,6 @@ func (posTable *PosTable) SelectItemByHeightValue(random int64) (common.Address,
 	r := rand.New(rand.NewSource(random))
 	index := int64(r.Intn(int(posTable.TotalSlots)))
 	sumSlots := int64(0)
-	posTable.Mtx.RLock()
-	defer posTable.Mtx.RUnlock()
 	signers := posTable.SortedSigners()
 	for _, signer := range signers {
 		posItem := posTable.PosItemMap[signer]
@@ -263,8 +261,6 @@ func (posTable *PosTable) SelectItemBySeedValue(vrf []byte, len int) (common.Add
 	r := rand.New(rand.NewSource(int64(res64) + int64(len)))
 	index := int64(r.Intn(int(posTable.TotalSlots)))
 	sumSlots := int64(0)
-	posTable.Mtx.RLock()
-	defer posTable.Mtx.RUnlock()
 	signers := posTable.SortedSigners()
 	for _, signer := range signers {
 		posItem := posTable.PosItemMap[signer]
