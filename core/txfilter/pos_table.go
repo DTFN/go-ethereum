@@ -122,7 +122,7 @@ func (posTable *PosTable) InitStruct() {
 			Signer: signer,
 			Slots:  posItem.Slots,
 		}
-		posTable.SortedUnbondPosItems.Push(&posItemWithSigner)
+		posTable.SortedUnbondPosItems.insert(&posItemWithSigner)
 		posTable.UnbondPosItemIndexMap[signer] = &posItemWithSigner
 
 		posTable.TmAddressToSignerMap[posItem.TmAddress] = signer
@@ -169,9 +169,16 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) err
 		}
 		posItem.Height = height
 		posTable.UnbondPosItemMap[signer] = posItem
-		posTable.SortedUnbondPosItems.insert(posItem)
+		posItemWithSigner := PosItemWithSigner{
+			Height: posItem.Height,
+			Signer: signer,
+			Slots:  posItem.Slots,
+		}
+		posTable.SortedUnbondPosItems.insert(&posItemWithSigner)
+		posTable.UnbondPosItemIndexMap[signer] = &posItemWithSigner
 
 		delete(posTable.PosItemMap, signer)
+		delete(posTable.PosItemIndexMap, signer)
 		posTable.SortedPosItems.remove(posTable.PosItemIndexMap[signer].index)
 		posTable.TotalSlots -= posItem.Slots
 		return nil
@@ -194,6 +201,7 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64) int {
 				panic("cannot remove validator for consensus safety")
 			}
 			delete(posTable.UnbondPosItemMap, posItemWithSigner.Signer)
+			delete(posTable.UnbondPosItemIndexMap, posItemWithSigner.Signer)
 			posTable.SortedUnbondPosItems.remove(posTable.UnbondPosItemIndexMap[posItemWithSigner.Signer].index)
 
 			delete(posTable.TmAddressToSignerMap, posItem.TmAddress)
@@ -206,17 +214,29 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64) int {
 	return count
 }
 
+func (posTable *PosTable) SortedSigners() []common.Address {
+	topKSigners := []common.Address{}
+	copyQueue := posTable.SortedPosItems.Copy()
+	len := len(*copyQueue)
+	for i := 0; i < len; i++ {
+		posItemWithSigner := heap.Pop(copyQueue).(*PosItemWithSigner)
+		topKSigners = append(topKSigners, posItemWithSigner.Signer)
+	}
+	return topKSigners
+}
+
 func (posTable *PosTable) TopKSigners(k int) []common.Address {
 	topKSigners := []common.Address{}
 	posTable.Mtx.RLock()
-	defer posTable.Mtx.RUnlock()
-	for i, posItemWithSigner := range *posTable.SortedPosItems {
-		if i >= k {
-			break
-		}
-		copySigner := common.Address{}
-		copySigner.SetBytes(posItemWithSigner.Signer.Bytes())
-		topKSigners = append(topKSigners, copySigner)
+	copyQueue := posTable.SortedPosItems.Copy()
+	posTable.Mtx.RUnlock()
+	len := len(*copyQueue)
+	if k > len {
+		k = len
+	}
+	for i := 0; i < k; i++ {
+		posItemWithSigner := heap.Pop(copyQueue).(*PosItemWithSigner)
+		topKSigners = append(topKSigners, posItemWithSigner.Signer)
 	}
 	return topKSigners
 }
@@ -225,10 +245,14 @@ func (posTable *PosTable) SelectItemByHeightValue(random int64) (common.Address,
 	r := rand.New(rand.NewSource(random))
 	index := int64(r.Intn(int(posTable.TotalSlots)))
 	sumSlots := int64(0)
-	for _, posItemWithSigner := range *posTable.SortedPosItems {
-		sumSlots += posItemWithSigner.Slots
+	posTable.Mtx.RLock()
+	defer posTable.Mtx.RUnlock()
+	signers := posTable.SortedSigners()
+	for _, signer := range signers {
+		posItem := posTable.PosItemMap[signer]
+		sumSlots += posItem.Slots
 		if sumSlots >= index {
-			return posItemWithSigner.Signer, *posTable.PosItemMap[posItemWithSigner.Signer]
+			return signer, *posItem
 		}
 	}
 	panic(fmt.Sprintf("random index %v out of SortedPosItems total slots range", index))
@@ -239,14 +263,17 @@ func (posTable *PosTable) SelectItemBySeedValue(vrf []byte, len int) (common.Add
 	r := rand.New(rand.NewSource(int64(res64) + int64(len)))
 	index := int64(r.Intn(int(posTable.TotalSlots)))
 	sumSlots := int64(0)
-	for _, posItemWithSigner := range *posTable.SortedPosItems {
-		sumSlots += posItemWithSigner.Slots
+	posTable.Mtx.RLock()
+	defer posTable.Mtx.RUnlock()
+	signers := posTable.SortedSigners()
+	for _, signer := range signers {
+		posItem := posTable.PosItemMap[signer]
+		sumSlots += posItem.Slots
 		if sumSlots >= index {
-			return posItemWithSigner.Signer, *posTable.PosItemMap[posItemWithSigner.Signer]
+			return signer, *posItem
 		}
 	}
 	panic(fmt.Sprintf("random index %v out of SortedPosItems total slots range", index))
-
 }
 
 type PosItem struct {
@@ -353,7 +380,6 @@ func (pq *PosItemSortedQueue) Pop() interface{} {
 
 func (pq *PosItemSortedQueue) insert(item *PosItemWithSigner) {
 	heap.Push(pq, item)
-	heap.Fix(pq, item.index)
 }
 
 // update modifies the priority and value of an Item in the queue.
@@ -389,7 +415,10 @@ func (pq *UnbondPosItemSortedQueue) Copy() *UnbondPosItemSortedQueue {
 func (pq *UnbondPosItemSortedQueue) Len() int { return len(*pq) }
 
 func (pq *UnbondPosItemSortedQueue) Less(i, j int) bool {
-	return (*pq)[i].Height > (*pq)[j].Height
+	if (*pq)[i].Height != (*pq)[j].Height {
+		return (*pq)[i].Height > (*pq)[j].Height
+	}
+	return (*pq)[i].Signer.String() > (*pq)[j].Signer.String()
 }
 
 func (pq *UnbondPosItemSortedQueue) Swap(i, j int) {
@@ -414,8 +443,9 @@ func (pq *UnbondPosItemSortedQueue) Pop() interface{} {
 	return item
 }
 
-func (pq *UnbondPosItemSortedQueue) insert(item *PosItem) {
+func (pq *UnbondPosItemSortedQueue) insert(item *PosItemWithSigner) {
 	heap.Push(pq, item)
+	heap.Fix(pq, item.index)
 }
 
 // update modifies the priority and value of an Item in the queue.
