@@ -227,9 +227,7 @@ func (posTable *PosTable) SortedSigners() []common.Address {
 
 func (posTable *PosTable) TopKSigners(k int) []common.Address {
 	topKSigners := []common.Address{}
-	posTable.Mtx.RLock()
 	copyQueue := posTable.SortedPosItems.Copy()
-	posTable.Mtx.RUnlock()
 	len := len(*copyQueue)
 	if k > len {
 		k = len
