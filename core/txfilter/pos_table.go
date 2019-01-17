@@ -164,6 +164,14 @@ func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) erro
 	return nil
 }
 
+func (posTable *PosTable) CanRemovePosItem() error{
+	posTable.Mtx.RLock()
+	defer posTable.Mtx.RUnlock()
+	if len(posTable.PosItemMap) <= 4 {
+		return fmt.Errorf("cannot remove validator for consensus safety")
+	}
+}
+
 func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) error {
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()

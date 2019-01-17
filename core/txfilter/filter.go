@@ -31,7 +31,7 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {
 		if IsUnlockTx(to) {
-			return nil
+			return EthPosTable.CanRemovePosItem()
 		} else if IsLockTx(to) {
 			tmpInt := big.NewInt(0)
 			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
@@ -121,8 +121,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {
 		if IsUnlockTx(to) {
-			EthPosTable.RemovePosItem(from, height)
-			return true, nil
+			return true, EthPosTable.RemovePosItem(from, height)
 		} else if IsLockTx(to) { //relock
 			tmpInt := big.NewInt(0)
 			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
