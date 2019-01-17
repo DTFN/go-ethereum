@@ -20,6 +20,9 @@ func init() {
 }
 
 func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
+	if EthPosTable == nil {
+		return fmt.Errorf("PosTable has not created yet")
+	}
 	EthPosTable.Mtx.RLock()
 	defer EthPosTable.Mtx.RUnlock()
 	if !EthPosTable.InitFlag {
@@ -107,9 +110,12 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 }
 
 func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
+	if EthPosTable == nil {	//should not happen
+		return false, fmt.Errorf("PosTable has not created yet")
+	}
 	EthPosTable.Mtx.RLock()
 	defer EthPosTable.Mtx.RUnlock()
-	if !EthPosTable.InitFlag {
+	if !EthPosTable.InitFlag { //should not happen
 		return false, fmt.Errorf("PosTable has not init yet")
 	}
 	posItem, exist := EthPosTable.PosItemMap[from]
