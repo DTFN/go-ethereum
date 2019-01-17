@@ -141,7 +141,7 @@ func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) erro
 	defer posTable.Mtx.Unlock()
 	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
-		if pi.Slots <= existedItem.Slots {
+		if pi.Slots <= existedItem.Slots {	//we should have judge this before call this func, so panic here
 			panic(fmt.Sprintf("locked signer %v balance decreased", signer))
 		}
 		posTable.PosItemMap[signer] = pi
@@ -170,6 +170,7 @@ func (posTable *PosTable) CanRemovePosItem() error{
 	if len(posTable.PosItemMap) <= 4 {
 		return fmt.Errorf("cannot remove validator for consensus safety")
 	}
+	return nil
 }
 
 func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) error {

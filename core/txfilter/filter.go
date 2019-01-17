@@ -36,7 +36,7 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 			tmpInt := big.NewInt(0)
 			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 			if posItem.Slots >= currentSlots {
-				return fmt.Errorf("signer %v already bonded at height %d ", from, posItem.Height)
+				return fmt.Errorf("signer %v already bonded at height %d ,balance has not increased", from, posItem.Height)
 			}
 
 			txData, err := UnMarshalTxData(txDataBytes)
@@ -80,7 +80,7 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 		} else {
 			if IsUnlockTx(to) {
 				return fmt.Errorf("signer %v has not bonded ", from)
-			} else if IsLockTx(to) {
+			} else if IsLockTx(to) {	//first lock
 				txData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
 					return err
@@ -126,7 +126,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 			tmpInt := big.NewInt(0)
 			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 			if posItem.Slots >= currentSlots {
-				return true, fmt.Errorf("signer %v already bonded at height %d ", from, posItem.Height)
+				return true, fmt.Errorf("signer %v already bonded at height %d , balance has not increased", from, posItem.Height)
 			}
 
 			txData, err := UnMarshalTxData(txDataBytes)
@@ -191,8 +191,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 				}
 				tmpInt := big.NewInt(0)
 				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
-				EthPosTable.UpsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
-				return true, nil
+				return true, EthPosTable.UpsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
 			}
 		}
 	}
