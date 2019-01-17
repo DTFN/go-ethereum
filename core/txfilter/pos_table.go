@@ -168,10 +168,10 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) err
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
-		posTable.ChangedFlagThisBlock = true
-		if len(posTable.PosItemMap)-len(posTable.UnbondPosItemMap) <= 4 {
+		if len(posTable.PosItemMap) <= 4 {
 			return fmt.Errorf("cannot remove validator for consensus safety")
 		}
+		posTable.ChangedFlagThisBlock = true
 		posItem.Height = height
 		posTable.UnbondPosItemMap[signer] = posItem
 		posItemWithSigner := PosItemWithSigner{
@@ -355,7 +355,7 @@ func (pq *PosItemSortedQueue) Copy() *PosItemSortedQueue {
 
 func (pq *PosItemSortedQueue) Len() int { return len(*pq) }
 
-func (pq *PosItemSortedQueue) Less(i, j int) bool {	 //Max-heap
+func (pq *PosItemSortedQueue) Less(i, j int) bool { //Max-heap
 	if (*pq)[i].Slots != (*pq)[j].Slots {
 		return (*pq)[i].Slots > (*pq)[j].Slots
 	}
