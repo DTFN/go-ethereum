@@ -113,8 +113,8 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 	if EthPosTable == nil {	//should not happen
 		return false, fmt.Errorf("PosTable has not created yet")
 	}
-	EthPosTable.Mtx.RLock()
-	defer EthPosTable.Mtx.RUnlock()
+	EthPosTable.Mtx.Lock()
+	defer EthPosTable.Mtx.Unlock()
 	if !EthPosTable.InitFlag { //should not happen
 		return false, fmt.Errorf("PosTable has not init yet")
 	}

@@ -119,6 +119,9 @@ func (posTable *PosTable) InitStruct() {
 		posTable.BlsKeyStringToSignerMap[posItem.BlsKeyString] = signer
 	}
 	posTable.TotalSlots = totalSlots
+	if totalSlots == 0 {
+		return
+	}
 
 	for signer, posItem := range posTable.UnbondPosItemMap {
 		posItemWithSigner := PosItemWithSigner{
@@ -137,11 +140,9 @@ func (posTable *PosTable) InitStruct() {
 }
 
 func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) error {
-	posTable.Mtx.Lock()
-	defer posTable.Mtx.Unlock()
 	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
-		if pi.Slots <= existedItem.Slots {	//we should have judge this before call this func, so panic here
+		if pi.Slots <= existedItem.Slots { //we should have judge this before call this func, so panic here
 			panic(fmt.Sprintf("locked signer %v balance decreased", signer))
 		}
 		posTable.PosItemMap[signer] = pi
@@ -164,9 +165,7 @@ func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) erro
 	return nil
 }
 
-func (posTable *PosTable) CanRemovePosItem() error{
-	posTable.Mtx.RLock()
-	defer posTable.Mtx.RUnlock()
+func (posTable *PosTable) CanRemovePosItem() error {
 	if len(posTable.PosItemMap) <= 4 {
 		return fmt.Errorf("cannot remove validator for consensus safety")
 	}
@@ -174,8 +173,6 @@ func (posTable *PosTable) CanRemovePosItem() error{
 }
 
 func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) error {
-	posTable.Mtx.Lock()
-	defer posTable.Mtx.Unlock()
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
 		if len(posTable.PosItemMap) <= 4 {
 			return fmt.Errorf("cannot remove validator for consensus safety")
