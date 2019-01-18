@@ -168,10 +168,9 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(eth.chainConfig, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb); err != nil {
 		return nil, err
 	}
-	if config.MinerThreads > 0 {
-		eth.miner = miner.New(eth, eth.chainConfig, eth.EventMux(), eth.engine)
-		eth.miner.SetExtra(makeExtraData(config.ExtraData))
-	}
+
+	eth.miner = miner.New(eth, eth.chainConfig, eth.EventMux(), eth.engine)
+	eth.miner.SetExtra(makeExtraData(config.ExtraData))
 
 	eth.ApiBackend = &EthApiBackend{eth, nil}
 	gpoParams := config.GPO
@@ -229,6 +228,9 @@ func CreateConsensusEngine(ctx *node.ServiceContext, config *ethash.Config, chai
 	case config.PowMode == ethash.ModeShared:
 		log.Warn("Ethash used in shared mode")
 		return ethash.NewShared()
+	case config.PowMode == ethash.ModeNil:
+		log.Warn("Ethash used in nil mode")
+		return ethash.NewNil()
 	default:
 		engine := ethash.New(ethash.Config{
 			CacheDir:       ctx.ResolvePath(config.CacheDir),

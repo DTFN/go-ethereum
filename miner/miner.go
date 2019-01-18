@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 )
 
 // Backend wraps all methods required for mining.
@@ -58,6 +59,14 @@ type Miner struct {
 }
 
 func New(eth Backend, config *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine) *Miner {
+	if ethashInstance, ok := engine.(*ethash.Ethash); ok && ethashInstance.Config().PowMode == ethash.ModeNil {
+		//don't execute miner.update()
+		return &Miner{
+			worker: &worker{
+				agents: map[Agent]struct{}{},
+			},
+		}
+	}
 	miner := &Miner{
 		eth:      eth,
 		mux:      mux,

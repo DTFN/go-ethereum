@@ -32,7 +32,7 @@ import (
 	"time"
 	"unsafe"
 
-	mmap "github.com/edsrzf/mmap-go"
+	"github.com/edsrzf/mmap-go"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -371,11 +371,12 @@ func MakeDataset(block uint64, dir string) {
 type Mode uint
 
 const (
-	ModeNormal Mode = iota
+	ModeNormal   Mode = iota
 	ModeShared
 	ModeTest
 	ModeFake
 	ModeFullFake
+	ModeNil
 )
 
 // Config are the configuration parameters of the ethash.
@@ -489,6 +490,15 @@ func NewShared() *Ethash {
 	return &Ethash{shared: sharedEthash}
 }
 
+// NewNil creates a fake ethash PoW indicate miner to stop immediately
+func NewNil() *Ethash {
+	return &Ethash{
+		config: Config{
+			PowMode: ModeNil,
+		},
+	}
+}
+
 // cache tries to retrieve a verification cache for the specified block number
 // by first checking against a list of in-memory caches, then against caches
 // stored on disk, and finally generating one if none can be found.
@@ -569,6 +579,10 @@ func (ethash *Ethash) Hashrate() float64 {
 // that is empty.
 func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
 	return nil
+}
+
+func (ethash *Ethash) Config() Config {
+	return ethash.config
 }
 
 // SeedHash is the seed to use for generating a verification cache and the mining
