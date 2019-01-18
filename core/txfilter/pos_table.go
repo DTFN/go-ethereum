@@ -140,6 +140,7 @@ func (posTable *PosTable) InitStruct() {
 }
 
 func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) error {
+	fmt.Printf("signer %X upsert pi %v",signer,pi)
 	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
 		if pi.Slots <= existedItem.Slots { //we should have judged this before call this func, so panic here
@@ -162,6 +163,7 @@ func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) erro
 
 	posTable.TmAddressToSignerMap[pi.TmAddress] = signer
 	posTable.BlsKeyStringToSignerMap[pi.BlsKeyString] = signer
+	fmt.Printf("signer %X upsert pi %v SUCCESS",signer,pi)
 	return nil
 }
 
@@ -173,8 +175,10 @@ func (posTable *PosTable) CanRemovePosItem() error {
 }
 
 func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) error {
+	fmt.Printf("signer %X remove height %v",signer,height)
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
 		if len(posTable.PosItemMap) <= 4 {
+			fmt.Printf("signer %X remove height %v FAIL , len<=4!",signer,height)
 			return fmt.Errorf("cannot remove validator for consensus safety")
 		}
 		posTable.ChangedFlagThisBlock = true
@@ -192,8 +196,10 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) err
 		posTable.SortedPosItems.remove(posTable.PosItemIndexMap[signer].index)
 		delete(posTable.PosItemIndexMap, signer)
 		posTable.TotalSlots -= posItem.Slots
+		fmt.Printf("signer %X remove height %v SUCCESS",signer,height)
 		return nil
 	} else {
+		fmt.Printf("signer %X remove height %v FAIL signer not exist",signer,height)
 		return fmt.Errorf("RemovePosItem. signer %v not exist in PosTable", signer)
 	}
 }
