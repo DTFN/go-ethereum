@@ -107,7 +107,7 @@ var (
 type TxStatus uint
 
 const (
-	TxStatusUnknown  TxStatus = iota
+	TxStatusUnknown TxStatus = iota
 	TxStatusQueued
 	TxStatusPending
 	TxStatusIncluded
@@ -257,7 +257,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	return pool
 }
 
-func (pool *TxPool) GetTxpoolChainHeadSize() int{
+func (pool *TxPool) GetTxpoolChainHeadSize() int {
 	return len(pool.chainHeadCh)
 }
 
@@ -342,7 +342,6 @@ func (pool *TxPool) loop() {
 		}
 	}
 }
-
 
 func (pool *TxPool) CopyPendingState() *state.StateDB {
 	pool.mu.Lock()
@@ -440,6 +439,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	}
 	pool.currentState = statedb
 	pool.pendingState = state.ManageState(statedb)
+	fmt.Println("newHead.gaslimit:%V", newHead.GasLimit)
 	if pool.currentMaxGas == 0 {
 		pool.currentMaxGas = newHead.GasLimit
 	}
@@ -597,8 +597,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrNegativeValue
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
-	fmt.Println("pool.currentMaxGas:%V",pool.currentMaxGas)
-	fmt.Println("tx.Gas:%V",tx.Gas())
+	fmt.Println("pool.currentMaxGas:%V", pool.currentMaxGas)
+	fmt.Println("tx.Gas:%V", tx.Gas())
 	if pool.currentMaxGas < tx.Gas() {
 		return ErrGasLimit
 	}
@@ -630,13 +630,13 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	return nil
 }
-func (pool *TxPool) ValidateExist(hash common.Hash)  bool {
+func (pool *TxPool) ValidateExist(hash common.Hash) bool {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
 	// If the transaction is already known, return true
 	if pool.all[hash] != nil {
 		return true
-	}else{
+	} else {
 		return false
 	}
 }
