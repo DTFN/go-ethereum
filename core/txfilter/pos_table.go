@@ -142,7 +142,7 @@ func (posTable *PosTable) InitStruct() {
 func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) error {
 	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
-		if pi.Slots <= existedItem.Slots { //we should have judge this before call this func, so panic here
+		if pi.Slots <= existedItem.Slots { //we should have judged this before call this func, so panic here
 			panic(fmt.Sprintf("locked signer %v balance decreased", signer))
 		}
 		posTable.PosItemMap[signer] = pi

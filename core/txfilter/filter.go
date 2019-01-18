@@ -36,7 +36,7 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 			tmpInt := big.NewInt(0)
 			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 			if posItem.Slots >= currentSlots {
-				return fmt.Errorf("signer %v already bonded at height %d ,balance has not increased", from, posItem.Height)
+				return fmt.Errorf("signer %X already bonded at height %d ,balance has not increased", from, posItem.Height)
 			}
 
 			txData, err := UnMarshalTxData(txDataBytes)
@@ -49,10 +49,10 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 			}
 			tmAddress := pubKey.Address().String()
 			if posItem.TmAddress != tmAddress {
-				return fmt.Errorf("signer %v bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
+				return fmt.Errorf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
 			}
 			if posItem.BlsKeyString != txData.BlsKeyString {
-				return fmt.Errorf("signer %v bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
+				return fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
 			}
 			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 			if !exist {
@@ -65,21 +65,21 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 
 			return nil
 		} else {
-			return fmt.Errorf("signer %v bonded at height %d ", from, posItem.Height)
+			return fmt.Errorf("signer %X bonded at height %d ", from, posItem.Height)
 		}
 	} else {
 		posItem, exist := EthPosTable.UnbondPosItemMap[from]
 		if exist {
 			if IsUnlockTx(to) {
-				return fmt.Errorf("signer %v already unbonded at height %d", from, posItem.Height)
+				return fmt.Errorf("signer %X already unbonded at height %d", from, posItem.Height)
 			} else if IsLockTx(to) {
-				return fmt.Errorf("signer %v unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
+				return fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			} else {
-				return fmt.Errorf("signer %v unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
+				return fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			}
 		} else {
 			if IsUnlockTx(to) {
-				return fmt.Errorf("signer %v has not bonded ", from)
+				return fmt.Errorf("signer %X has not bonded ", from)
 			} else if IsLockTx(to) {	//first lock
 				txData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
@@ -126,7 +126,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 			tmpInt := big.NewInt(0)
 			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 			if posItem.Slots >= currentSlots {
-				return true, fmt.Errorf("signer %v already bonded at height %d , balance has not increased", from, posItem.Height)
+				return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
 			}
 
 			txData, err := UnMarshalTxData(txDataBytes)
@@ -139,10 +139,10 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 			}
 			tmAddress := pubKey.Address().String()
 			if posItem.TmAddress != tmAddress {
-				return true, fmt.Errorf("signer %v bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
+				return true, fmt.Errorf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
 			}
 			if posItem.BlsKeyString != txData.BlsKeyString {
-				return true, fmt.Errorf("signer %v bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
+				return true, fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
 			}
 			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 			if !exist {
@@ -156,21 +156,21 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 			EthPosTable.UpsertPosItem(from, posItem)
 			return true, nil
 		} else {
-			return false, fmt.Errorf("signer %v bonded at height %d ", from, posItem.Height)
+			return false, fmt.Errorf("signer %X bonded at height %d ", from, posItem.Height)
 		}
 	} else {
 		posItem, exist := EthPosTable.UnbondPosItemMap[from]
 		if exist {
 			if IsUnlockTx(to) {
-				return true, fmt.Errorf("signer %v already unbonded at height %d", from, posItem.Height)
+				return true, fmt.Errorf("signer %X already unbonded at height %d", from, posItem.Height)
 			} else if IsLockTx(to) {
-				return true, fmt.Errorf("signer %v unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
+				return true, fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			} else {
-				return false, fmt.Errorf("signer %v unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
+				return false, fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			}
 		} else {
 			if IsUnlockTx(to) {
-				return true, fmt.Errorf("signer %v has not bonded ", from)
+				return true, fmt.Errorf("signer %X has not bonded ", from)
 			} else if IsLockTx(to) { //first lock
 				txData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
