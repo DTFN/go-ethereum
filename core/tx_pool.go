@@ -439,10 +439,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	}
 	pool.currentState = statedb
 	pool.pendingState = state.ManageState(statedb)
-	fmt.Println("newHead.gaslimit:%V", newHead.GasLimit)
-	if pool.currentMaxGas == 0 {
-		pool.currentMaxGas = newHead.GasLimit
-	}
+	pool.currentMaxGas = newHead.GasLimit
 
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
