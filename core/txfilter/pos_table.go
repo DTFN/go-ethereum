@@ -189,8 +189,8 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) err
 		posTable.UnbondPosItemIndexMap[signer] = &posItemWithSigner
 
 		delete(posTable.PosItemMap, signer)
-		delete(posTable.PosItemIndexMap, signer)
 		posTable.SortedPosItems.remove(posTable.PosItemIndexMap[signer].index)
+		delete(posTable.PosItemIndexMap, signer)
 		posTable.TotalSlots -= posItem.Slots
 		return nil
 	} else {
@@ -457,7 +457,6 @@ func (pq *UnbondPosItemSortedQueue) Pop() interface{} {
 
 func (pq *UnbondPosItemSortedQueue) insert(item *PosItemWithSigner) {
 	heap.Push(pq, item)
-	heap.Fix(pq, item.index)
 }
 
 // update modifies the priority and value of an Item in the queue.
