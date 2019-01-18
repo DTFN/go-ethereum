@@ -57,7 +57,7 @@ const (
 	maxFutureBlocks     = 256
 	maxTimeFutureBlocks = 30
 	badBlockLimit       = 10
-	triesInMemory       = 128
+	triesInMemory       = 13
 
 	// BlockChainVersion ensures that an incompatible database forces a resync from scratch.
 	BlockChainVersion = 3
@@ -1538,7 +1538,7 @@ func (bc *BlockChain) Config() *params.ChainConfig { return bc.chainConfig }
 // Engine retrieves the blockchain's consensus engine.
 func (bc *BlockChain) Engine() consensus.Engine { return bc.engine }
 
-func (bc *BlockChain) AddGcproc(duration time.Duration) { bc.gcproc+=duration }
+func (bc *BlockChain) AddGcproc(duration time.Duration) { bc.gcproc += duration }
 
 // SubscribeRemovedLogsEvent registers a subscription of RemovedLogsEvent.
 func (bc *BlockChain) SubscribeRemovedLogsEvent(ch chan<- RemovedLogsEvent) event.Subscription {
