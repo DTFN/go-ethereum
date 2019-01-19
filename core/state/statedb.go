@@ -654,7 +654,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	return root, err
 }
 
-func (db *StateDB) InitPosTable() *txfilter.PosTable {
+func (db *StateDB) InitPosTable() (*txfilter.PosTable) {
 	if txfilter.EthPosTable == nil {
 		nextEpochDataAddress := common.HexToAddress("0x8888888888888888888888888888888888888888")
 		log.Info("Read NextEpochValData")
