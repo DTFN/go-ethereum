@@ -665,7 +665,7 @@ func (db *StateDB) InitPosTable() (*txfilter.PosTable) {
 			return nil
 		} else {
 			log.Info("NextEpochValData.PosTable Not nil")
-			txfilter.EthPosTable = txfilter.NewPosTable()
+			txfilter.CreatePosTable()
 			err := json.Unmarshal(nextBytes, txfilter.EthPosTable)
 			if err != nil {
 				panic(fmt.Sprintf("initialize NextEpochValData.PosTable error %v", err))

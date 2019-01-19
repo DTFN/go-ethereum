@@ -20,6 +20,11 @@ var (
 	EthPosTable *PosTable
 )
 
+func CreatePosTable() *PosTable {
+	EthPosTable = NewPosTable()
+	return EthPosTable
+}
+
 type PosTable struct {
 	Mtx             sync.RWMutex                          `json:"-"`
 	InitFlag        bool                                  `json:"-"`
