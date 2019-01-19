@@ -654,24 +654,25 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	return root, err
 }
 
-func (db *StateDB) InitPosTable() {
-	if txfilter.EthPosTable != nil {
-		txfilter.EthPosTable.Mtx.Lock()
-		defer txfilter.EthPosTable.Mtx.Unlock()
+func (db *StateDB) InitPosTable() *txfilter.PosTable {
+	if txfilter.EthPosTable == nil {
 		nextEpochDataAddress := common.HexToAddress("0x8888888888888888888888888888888888888888")
 		log.Info("Read NextEpochValData")
 		nextBytes := db.GetCode(nextEpochDataAddress)
 		if len(nextBytes) == 0 {
 			// no predata existed
 			log.Info("no pre NextEpochValData.PosTable")
+			return nil
 		} else {
 			log.Info("NextEpochValData.PosTable Not nil")
+			txfilter.EthPosTable = txfilter.NewPosTable()
 			err := json.Unmarshal(nextBytes, txfilter.EthPosTable)
 			if err != nil {
 				panic(fmt.Sprintf("initialize NextEpochValData.PosTable error %v", err))
 			}
+			return txfilter.EthPosTable
 		}
 	} else {
-		panic("posTable == nil, cannot initialize")
+		panic("txfilter.EthPosTable already exist")
 	}
 }

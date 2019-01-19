@@ -20,11 +20,6 @@ var (
 	EthPosTable *PosTable
 )
 
-func CreatePosTable() *PosTable {
-	EthPosTable = NewPosTable()
-	return EthPosTable
-}
-
 type PosTable struct {
 	Mtx             sync.RWMutex                          `json:"-"`
 	InitFlag        bool                                  `json:"-"`
@@ -57,6 +52,7 @@ func NewPosTable() *PosTable {
 		UnbondPosItemIndexMap:   make(map[common.Address]*PosItemWithSigner),
 		TotalSlots:              0,
 		ChangedFlagThisBlock:    false,
+		InitFlag:                false,
 	}
 }
 
@@ -104,6 +100,12 @@ func (posTable *PosTable) SetThreshold(threshold *big.Int) {
 func (posTable *PosTable) InitStruct() {
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()
+	posTable.SortedPosItems = NewPosItemSortedQueue()
+	posTable.PosItemIndexMap = make(map[common.Address]*PosItemWithSigner)
+	posTable.TmAddressToSignerMap = make(map[string]common.Address)
+	posTable.BlsKeyStringToSignerMap = make(map[string]common.Address)
+	posTable.SortedUnbondPosItems = NewUnbondPosItemSortedQueue()
+	posTable.UnbondPosItemIndexMap = make(map[common.Address]*PosItemWithSigner)
 	totalSlots := int64(0)
 	for signer, posItem := range posTable.PosItemMap {
 		posItemWithSigner := PosItemWithSigner{
@@ -118,10 +120,10 @@ func (posTable *PosTable) InitStruct() {
 		posTable.TmAddressToSignerMap[posItem.TmAddress] = signer
 		posTable.BlsKeyStringToSignerMap[posItem.BlsKeyString] = signer
 	}
-	posTable.TotalSlots = totalSlots
 	if totalSlots == 0 {
-		return
+		panic("totalSlots == 0, invalid PosTable")
 	}
+	posTable.TotalSlots = totalSlots
 
 	for signer, posItem := range posTable.UnbondPosItemMap {
 		posItemWithSigner := PosItemWithSigner{
@@ -140,7 +142,7 @@ func (posTable *PosTable) InitStruct() {
 }
 
 func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) error {
-	fmt.Printf("signer %X upsert pi %v",signer,pi)
+	fmt.Printf("signer %X upsert pi %v", signer, pi)
 	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
 		if pi.Slots <= existedItem.Slots { //we should have judged this before call this func, so panic here
@@ -163,7 +165,7 @@ func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) erro
 
 	posTable.TmAddressToSignerMap[pi.TmAddress] = signer
 	posTable.BlsKeyStringToSignerMap[pi.BlsKeyString] = signer
-	fmt.Printf("signer %X upsert pi %v SUCCESS",signer,pi)
+	fmt.Printf("signer %X upsert pi %v SUCCESS", signer, pi)
 	return nil
 }
 
@@ -175,10 +177,10 @@ func (posTable *PosTable) CanRemovePosItem() error {
 }
 
 func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) error {
-	fmt.Printf("signer %X remove height %v",signer,height)
+	fmt.Printf("signer %X remove height %v", signer, height)
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
 		if len(posTable.PosItemMap) <= 4 {
-			fmt.Printf("signer %X remove height %v FAIL , len<=4!",signer,height)
+			fmt.Printf("signer %X remove height %v FAIL , len<=4!", signer, height)
 			return fmt.Errorf("cannot remove validator for consensus safety")
 		}
 		posTable.ChangedFlagThisBlock = true
@@ -196,10 +198,10 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) err
 		posTable.SortedPosItems.remove(posTable.PosItemIndexMap[signer].index)
 		delete(posTable.PosItemIndexMap, signer)
 		posTable.TotalSlots -= posItem.Slots
-		fmt.Printf("signer %X remove height %v SUCCESS",signer,height)
+		fmt.Printf("signer %X remove height %v SUCCESS", signer, height)
 		return nil
 	} else {
-		fmt.Printf("signer %X remove height %v FAIL signer not exist",signer,height)
+		fmt.Printf("signer %X remove height %v FAIL signer not exist", signer, height)
 		return fmt.Errorf("RemovePosItem. signer %v not exist in PosTable", signer)
 	}
 }
