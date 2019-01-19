@@ -111,11 +111,13 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 
 func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
 	if EthPosTable == nil {	//should not happen
+	fmt.Printf("PosTable has not created yet")
 		return false, fmt.Errorf("PosTable has not created yet")
 	}
 	EthPosTable.Mtx.Lock()
 	defer EthPosTable.Mtx.Unlock()
 	if !EthPosTable.InitFlag { //should not happen
+		fmt.Printf("PosTable has not init yet")
 		return false, fmt.Errorf("PosTable has not init yet")
 	}
 	posItem, exist := EthPosTable.PosItemMap[from]
@@ -126,6 +128,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 			tmpInt := big.NewInt(0)
 			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 			if posItem.Slots >= currentSlots {
+				fmt.Printf("signer %X already bonded at height %d , balance has not increased",from, posItem.Height)
 				return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
 			}
 
@@ -139,9 +142,11 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 			}
 			tmAddress := pubKey.Address().String()
 			if posItem.TmAddress != tmAddress {
+				fmt.Printf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
 				return true, fmt.Errorf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
 			}
 			if posItem.BlsKeyString != txData.BlsKeyString {
+				fmt.Printf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
 				return true, fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
 			}
 			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
@@ -162,14 +167,18 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 		posItem, exist := EthPosTable.UnbondPosItemMap[from]
 		if exist {
 			if IsUnlockTx(to) {
+				fmt.Printf("signer %X already unbonded at height %d", from, posItem.Height)
 				return true, fmt.Errorf("signer %X already unbonded at height %d", from, posItem.Height)
 			} else if IsLockTx(to) {
+				fmt.Printf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 				return true, fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			} else {
+				fmt.Printf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 				return false, fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			}
 		} else {
 			if IsUnlockTx(to) {
+				fmt.Printf("signer %X has not bonded ", from)
 				return true, fmt.Errorf("signer %X has not bonded ", from)
 			} else if IsLockTx(to) { //first lock
 				txData, err := UnMarshalTxData(txDataBytes)
@@ -183,10 +192,12 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 				tmAddress := pubKey.Address().String()
 				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 				if exist {
+					fmt.Printf("tmAddress %v already be bonded by %v", tmAddress, signer)
 					return true, fmt.Errorf("tmAddress %v already be bonded by %v", tmAddress, signer)
 				}
 				signer, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 				if exist {
+					fmt.Printf("blsKeyString %v already be bonded by %v", txData.BlsKeyString, signer)
 					return true, fmt.Errorf("blsKeyString %v already be bonded by %v", txData.BlsKeyString, signer)
 				}
 				tmpInt := big.NewInt(0)
