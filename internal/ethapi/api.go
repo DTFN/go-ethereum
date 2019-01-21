@@ -1239,8 +1239,10 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	if e != nil {
 		log.Error("submitTransaction error:", "err", e.Error())
 
+	}else{
+		log.Info("tx hash", "hash", hashes.Hex())
 	}
-	log.Info("tx hash", "hash", hashes.Hex())
+
 	return hashes, e
 }
 

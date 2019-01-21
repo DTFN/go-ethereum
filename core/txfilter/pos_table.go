@@ -142,7 +142,6 @@ func (posTable *PosTable) InitStruct() {
 		posTable.TmAddressToSignerMap[posItem.TmAddress] = signer
 		posTable.BlsKeyStringToSignerMap[posItem.BlsKeyString] = signer
 	}
-	posTable.ExportSortedSigners()
 	posTable.InitFlag = true
 }
 
@@ -215,15 +214,15 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64) int {
 	count := 0
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()
+	if len(posTable.PosItemMap) < 4 {
+		panic("TryRemoveUnbondPosItems, len(posTable.PosItemMap) < 4")
+	}
 	for _, signer := range posTable.SortedUnbondSigners {
 		posItem, ok := posTable.UnbondPosItemMap[signer]
 		if !ok {
 			panic(fmt.Sprintf("PosTable UnbondPosItemMap mismatch with SortedUnbondPosItems. %v ", posTable))
 		}
 		if (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks <= currentHeight {
-			if len(posTable.PosItemMap)-1 <= 4 {
-				panic("cannot remove validator for consensus safety")
-			}
 			delete(posTable.UnbondPosItemMap, signer)
 			posTable.SortedUnbondPosItems.remove(posTable.UnbondPosItemIndexMap[signer].index)
 			delete(posTable.UnbondPosItemIndexMap, signer)

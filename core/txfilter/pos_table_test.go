@@ -136,7 +136,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, table.SortedSigners[3], Address2)
 
 	//TestRemovePosTable
-	err = table.RemovePosItem(Address5,190)
+	err = table.RemovePosItem(Address5, 190)
 	require.Error(t, fmt.Errorf(fmt.Sprintf("RemovePosItem. signer %v not exist in PosTable", Address5)))
 
 	PosItem5 := NewPosItem(
@@ -148,7 +148,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 		Address5)
 	err = table.UpsertPosItem(Address5, PosItem5)
 	require.Equal(t, int64(305), table.TotalSlots)
-	require.Equal(t, 0, table.PosItemIndexMap[Address5].index)	//5 to the top, 1 down, 4 down
+	require.Equal(t, 0, table.PosItemIndexMap[Address5].index) //5 to the top, 1 down, 4 down
 	require.Equal(t, 1, table.PosItemIndexMap[Address1].index)
 	require.Equal(t, 2, table.PosItemIndexMap[Address3].index)
 	require.Equal(t, 3, table.PosItemIndexMap[Address2].index)
@@ -163,7 +163,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, table.SortedSigners[2], Address3)
 	require.Equal(t, table.SortedSigners[3], Address4)
 	require.Equal(t, table.SortedSigners[4], Address2)
-	err = table.RemovePosItem(Address5,300)
+	err = table.RemovePosItem(Address5, 300)
 	require.Equal(t, int64(182), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address1].index)
 	require.Equal(t, 1, table.PosItemIndexMap[Address4].index)
@@ -172,13 +172,47 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, int64(90), table.PosItemMap[Address1].Slots)
 	require.Equal(t, int64(51), table.PosItemMap[Address3].Slots)
 	require.Equal(t, int64(30), table.PosItemMap[Address4].Slots)
+	require.Equal(t, 1, len(table.UnbondPosItemMap))
+	require.Equal(t, 1, len(table.UnbondPosItemIndexMap))
 	table.ExportSortedSigners()
 	require.Equal(t, table.SortedSigners[0], Address1)
 	require.Equal(t, table.SortedSigners[1], Address3)
 	require.Equal(t, table.SortedSigners[2], Address4)
 	require.Equal(t, table.SortedSigners[3], Address2)
-	tableJson,_:=json.Marshal(table)
-	fmt.Printf("table json: %X ",tableJson)
+
+	//init persist data test
+	tableJson, _ := json.Marshal(table)
+	fmt.Println()
+	fmt.Printf("table %v json: %X ", table, tableJson)
+	table1 := NewPosTable()
+	err = json.Unmarshal(tableJson, &table1)
+	table1.InitStruct()
+	require.Equal(t, int64(182), table1.TotalSlots)
+	require.Equal(t, int64(90), table1.PosItemMap[Address1].Slots)
+	require.Equal(t, int64(51), table1.PosItemMap[Address3].Slots)
+	require.Equal(t, int64(30), table1.PosItemMap[Address4].Slots)
+	require.Equal(t, 1, len(table1.UnbondPosItemMap))
+	require.Equal(t, 1, len(table1.UnbondPosItemIndexMap))
+	table1.ExportSortedSigners()
+	require.Equal(t, table1.SortedSigners[0], Address1)
+	require.Equal(t, table1.SortedSigners[1], Address3)
+	require.Equal(t, table1.SortedSigners[2], Address4)
+	require.Equal(t, table1.SortedSigners[3], Address2)
+
+	tableJson1, _ := json.Marshal(table1)
+	fmt.Println()
+	fmt.Printf("table1 %v json: %X ", table1, tableJson1)
+	require.Equal(t, tableJson, tableJson1)
+
+	table.TryRemoveUnbondPosItems(800)
+	table1.TryRemoveUnbondPosItems(800)
+	require.Equal(t, 0, len(table.UnbondPosItemMap))
+	require.Equal(t, 0, len(table.UnbondPosItemIndexMap))
+	require.Equal(t, 0, len(table1.UnbondPosItemMap))
+	require.Equal(t, 0, len(table1.UnbondPosItemIndexMap))
+	tableJson, _ = json.Marshal(table)
+	tableJson1, _ = json.Marshal(table1)
+	require.Equal(t, tableJson, tableJson1)
 }
 
 /*func TestSelectItemByHeightValue(t *testing.T) {
