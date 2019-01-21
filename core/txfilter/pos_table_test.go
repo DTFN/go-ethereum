@@ -163,7 +163,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, table.SortedSigners[2], Address3)
 	require.Equal(t, table.SortedSigners[3], Address4)
 	require.Equal(t, table.SortedSigners[4], Address2)
-	err = table.RemovePosItem(Address5, 300)
+	err = table.RemovePosItem(Address5, 223)
 	require.Equal(t, int64(182), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address1].index)
 	require.Equal(t, 1, table.PosItemIndexMap[Address4].index)

@@ -15,7 +15,7 @@ import (
 // it means the lowest bond balance must equal or larger than the 1/1000 of totalBalance
 const ThresholdUnit = 1000
 const UnbondWaitEpochs = 3
-const EpochBlocks = 200
+const EpochBlocks = int64(200)
 
 var (
 	EthPosTable *PosTable
@@ -101,21 +101,21 @@ func (posTable *PosTable) Copy() *PosTable {
 }
 
 func (posTable *PosTable) String() string {
-	posItemStrings:=make([]string,len(posTable.PosItemMap)+len(posTable.UnbondPosItemIndexMap)+3)
-	i:=0
-	posItemStrings[i]= fmt.Sprintf("PosItemMap len %v :",len(posTable.PosItemMap))
+	posItemStrings := make([]string, len(posTable.PosItemMap)+len(posTable.UnbondPosItemIndexMap)+3)
+	i := 0
+	posItemStrings[i] = fmt.Sprintf("PosItemMap len %v :", len(posTable.PosItemMap))
 	i++
-	for signer,posItem:=range posTable.PosItemMap{
-		posItemStrings[i]= fmt.Sprintf("%v %v : %v",i,signer,*posItem)
+	for signer, posItem := range posTable.PosItemMap {
+		posItemStrings[i] = fmt.Sprintf("%v %v : %v", i, signer, *posItem)
 		i++
 	}
-	posItemStrings[i]= fmt.Sprintf("UnbondPosItemMap len %v :",len(posTable.UnbondPosItemMap))
+	posItemStrings[i] = fmt.Sprintf("UnbondPosItemMap len %v :", len(posTable.UnbondPosItemMap))
 	i++
-	for signer,posItem:=range posTable.UnbondPosItemMap{
-		posItemStrings[i]= fmt.Sprintf("%v %v : %v",i,signer,*posItem)
+	for signer, posItem := range posTable.UnbondPosItemMap {
+		posItemStrings[i] = fmt.Sprintf("%v %v : %v", i, signer, *posItem)
 		i++
 	}
-	posItemStrings[i]= fmt.Sprintf("threshold %v :",posTable.Threshold)
+	posItemStrings[i] = fmt.Sprintf("threshold %v :", posTable.Threshold)
 	return strings.Join(posItemStrings, "\n  ")
 }
 
@@ -233,14 +233,14 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) err
 	}
 }
 
-func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64) int {
+func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64, sortedUnbondSigners []common.Address) int {
 	count := 0
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()
 	if len(posTable.PosItemMap) < 4 {
 		panic("TryRemoveUnbondPosItems, len(posTable.PosItemMap) < 4")
 	}
-	for _, signer := range posTable.SortedUnbondSigners {
+	for _, signer := range sortedUnbondSigners {
 		posItem, ok := posTable.UnbondPosItemMap[signer]
 		if !ok {
 			panic(fmt.Sprintf("PosTable UnbondPosItemMap mismatch with SortedUnbondPosItems. %v ", posTable))
