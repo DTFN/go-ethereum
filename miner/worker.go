@@ -260,7 +260,7 @@ func (self *worker) update() {
 
 			// Handle TxPreEvent
 		case ev := <-self.txCh:
-			fmt.Printf("worker receive TxPreEvent %v ", "ev", ev)
+			fmt.Printf("worker receive TxPreEvent %v ",  ev)
 			// Apply transaction to the pending state if we're not mining
 			if atomic.LoadInt32(&self.mining) == 0 {
 				self.currentMu.Lock()

@@ -1194,16 +1194,16 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
-/*	data := ""
-	if args.Data != nil {
-		data = args.Data.String()
-	}
-	input := ""
-	if args.Input != nil {
-		data = args.Input.String()
-	}
-	log.Debug("receiveSendTx:", "from", args.From, "to", args.To, "data", data, "input", input)
-*/
+	/*	data := ""
+		if args.Data != nil {
+			data = args.Data.String()
+		}
+		input := ""
+		if args.Input != nil {
+			data = args.Input.String()
+		}
+		log.Debug("receiveSendTx:", "from", args.From, "to", args.To, "data", data, "input", input)
+	*/
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}
 
@@ -1232,14 +1232,15 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	}
 	signed, err := wallet.SignTx(account, tx, chainID)
 	if err != nil {
-		log.Error("error:", err.Error())
+		log.Error("signTx error:", "err", err.Error())
 		return common.Hash{}, err
 	}
 	hashes, e := submitTransaction(ctx, s.b, signed)
 	if e != nil {
-		log.Error("submitTransaction error:", e.Error())
+		log.Error("submitTransaction error:", "err", e.Error())
+
 	}
-	log.Info("hashes", hashes.Hex())
+	log.Info("tx hash", "hash", hashes.Hex())
 	return hashes, e
 }
 
