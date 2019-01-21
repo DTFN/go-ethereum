@@ -1203,7 +1203,6 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	if args.Input != nil {
 		data = args.Input.String()
 	}
-	log.Info("receiveSendTx:", args.From, args.To, data, input)
 
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: args.From}

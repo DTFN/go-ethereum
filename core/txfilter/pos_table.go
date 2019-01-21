@@ -86,7 +86,7 @@ func (posTable *PosTable) Copy() *PosTable {
 		newPosTable.PosItemIndexMap[posItem.Signer] = posItem
 	}
 	for _, posItem := range *posTable.SortedUnbondPosItems {
-		newPosTable.PosItemIndexMap[posItem.Signer] = posItem
+		newPosTable.UnbondPosItemIndexMap[posItem.Signer] = posItem
 	}
 	newPosTable.TotalSlots = posTable.TotalSlots
 	copyThreashold := big.Int{}
@@ -225,8 +225,8 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64) int {
 				panic("cannot remove validator for consensus safety")
 			}
 			delete(posTable.UnbondPosItemMap, signer)
-			delete(posTable.UnbondPosItemIndexMap, signer)
 			posTable.SortedUnbondPosItems.remove(posTable.UnbondPosItemIndexMap[signer].index)
+			delete(posTable.UnbondPosItemIndexMap, signer)
 
 			delete(posTable.TmAddressToSignerMap, posItem.TmAddress)
 			delete(posTable.BlsKeyStringToSignerMap, posItem.BlsKeyString)

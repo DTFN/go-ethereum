@@ -252,14 +252,15 @@ func (self *worker) update() {
 		case <-self.chainHeadCh:
 			self.commitNewWork()
 
-		// Handle ChainSideEvent
+			// Handle ChainSideEvent
 		case ev := <-self.chainSideCh:
 			self.uncleMu.Lock()
 			self.possibleUncles[ev.Block.Hash()] = ev.Block
 			self.uncleMu.Unlock()
 
-		// Handle TxPreEvent
+			// Handle TxPreEvent
 		case ev := <-self.txCh:
+			fmt.Printf("worker receive TxPreEvent %v ", "ev", ev)
 			// Apply transaction to the pending state if we're not mining
 			if atomic.LoadInt32(&self.mining) == 0 {
 				self.currentMu.Lock()
@@ -277,7 +278,7 @@ func (self *worker) update() {
 				}
 			}
 
-		// System stopped
+			// System stopped
 		case <-self.txSub.Err():
 			return
 		case <-self.chainHeadSub.Err():
