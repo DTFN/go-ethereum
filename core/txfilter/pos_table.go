@@ -9,6 +9,7 @@ import (
 	"github.com/spaolacci/murmur3"
 	"math/rand"
 	"container/heap"
+	"strings"
 )
 
 // it means the lowest bond balance must equal or larger than the 1/1000 of totalBalance
@@ -21,6 +22,9 @@ var (
 )
 
 func CreatePosTable() *PosTable {
+	if EthPosTable != nil {
+		panic("txfilter.EthPosTable already exist")
+	}
 	EthPosTable = NewPosTable()
 	return EthPosTable
 }
@@ -94,6 +98,25 @@ func (posTable *PosTable) Copy() *PosTable {
 	newPosTable.Threshold = &copyThreashold
 	newPosTable.InitFlag = true
 	return newPosTable
+}
+
+func (posTable *PosTable) String() string {
+	posItemStrings:=make([]string,len(posTable.PosItemMap)+len(posTable.UnbondPosItemIndexMap)+3)
+	i:=0
+	posItemStrings[i]= fmt.Sprintf("PosItemMap len %v :",len(posTable.PosItemMap))
+	i++
+	for signer,posItem:=range posTable.PosItemMap{
+		posItemStrings[i]= fmt.Sprintf("%v %v : %v",i,signer,*posItem)
+		i++
+	}
+	posItemStrings[i]= fmt.Sprintf("UnbondPosItemMap len %v :",len(posTable.UnbondPosItemMap))
+	i++
+	for signer,posItem:=range posTable.UnbondPosItemMap{
+		posItemStrings[i]= fmt.Sprintf("%v %v : %v",i,signer,*posItem)
+		i++
+	}
+	posItemStrings[i]= fmt.Sprintf("threshold %v :",posTable.Threshold)
+	return strings.Join(posItemStrings, "\n  ")
 }
 
 func (posTable *PosTable) SetThreshold(threshold *big.Int) {
