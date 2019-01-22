@@ -203,7 +203,7 @@ func (posTable *PosTable) CanRemovePosItem() error {
 	return nil
 }
 
-func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) error {
+func (posTable *PosTable) RemovePosItem(signer common.Address, height int64, slash bool) error {
 	fmt.Printf("signer %X remove height %v", signer, height)
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
 		if len(posTable.PosItemMap) <= 4 {
@@ -212,6 +212,9 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64) err
 		}
 		posTable.ChangedFlagThisBlock = true
 		posItem.Height = height
+		if slash {
+			posItem.Slots = 0
+		}
 		posTable.UnbondPosItemMap[signer] = posItem
 		posItemWithSigner := PosItemWithSigner{
 			Height: posItem.Height,

@@ -136,7 +136,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, table.SortedSigners[3], Address2)
 
 	//TestRemovePosTable
-	err = table.RemovePosItem(Address5, 190)
+	err = table.RemovePosItem(Address5, 190, false)
 	require.Error(t, fmt.Errorf(fmt.Sprintf("RemovePosItem. signer %v not exist in PosTable", Address5)))
 
 	PosItem5 := NewPosItem(
@@ -163,7 +163,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, table.SortedSigners[2], Address3)
 	require.Equal(t, table.SortedSigners[3], Address4)
 	require.Equal(t, table.SortedSigners[4], Address2)
-	err = table.RemovePosItem(Address5, 223)
+	err = table.RemovePosItem(Address5, 223, false)
 	require.Equal(t, int64(182), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address1].index)
 	require.Equal(t, 1, table.PosItemIndexMap[Address4].index)
