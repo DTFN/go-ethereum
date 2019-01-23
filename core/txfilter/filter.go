@@ -86,7 +86,7 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 					return err
 				}
 				if len(txData.BlsKeyString) == 0 {
-					return fmt.Errorf("len(txData.BlsKeyString) wrong BlsKeyString? %v", txData.BlsKeyString)
+					return fmt.Errorf("len(txData.BlsKeyString)==0, wrong BlsKeyString? %v", txData.BlsKeyString)
 				}
 				pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
 				if err != nil {
@@ -94,7 +94,7 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 				}
 				tmAddress := pubKey.Address().String()
 				if len(tmAddress) == 0 {
-					return fmt.Errorf("len(tmAddress)==0 wrong pubKey? %v", txData.PubKey)
+					return fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
 				}
 				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 				if exist {
@@ -192,7 +192,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 					return true, err
 				}
 				if len(txData.BlsKeyString) == 0 {
-					return true,fmt.Errorf("len(txData.BlsKeyString) wrong BlsKeyString? %v", txData.BlsKeyString)
+					return true,fmt.Errorf("len(txData.BlsKeyString)==0, wrong BlsKeyString? %v", txData.BlsKeyString)
 				}
 				pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
 				if err != nil {
@@ -200,7 +200,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 				}
 				tmAddress := pubKey.Address().String()
 				if len(tmAddress) == 0 {
-					return true,fmt.Errorf("len(tmAddress)==0 wrong pubKey? %v", txData.PubKey)
+					return true,fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
 				}
 				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 				if exist {

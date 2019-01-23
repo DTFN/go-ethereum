@@ -204,8 +204,8 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	fmt.Printf("table1 %v json: %X ", table1, tableJson1)
 	require.Equal(t, tableJson, tableJson1)
 
-	table.TryRemoveUnbondPosItems(800)
-	table1.TryRemoveUnbondPosItems(800)
+	table.TryRemoveUnbondPosItems(800,table.SortedUnbondSigners)
+	table1.TryRemoveUnbondPosItems(800,table1.SortedUnbondSigners)
 	require.Equal(t, 0, len(table.UnbondPosItemMap))
 	require.Equal(t, 0, len(table.UnbondPosItemIndexMap))
 	require.Equal(t, 0, len(table1.UnbondPosItemMap))
