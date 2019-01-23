@@ -6,7 +6,7 @@ import (
 )
 
 type TxData struct {
-	PubKey	abciTypes.PubKey	`json:"pubKey"`
+	PubKey	abciTypes.PubKey	`json:"pub_key"`
 	Beneficiary  string	`json:"beneficiary"`
 	BlsKeyString string	`json:"bls_key_string"`
 }

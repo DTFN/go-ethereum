@@ -56,11 +56,11 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 			}
 			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 			if !exist {
-				panic(fmt.Sprintf("tmAddress %v already be bonded by %v, but not found in TmAddressToSignerMap", tmAddress, from))
+				panic(fmt.Sprintf("tmAddress %v already be bonded by %X, but not found in TmAddressToSignerMap", tmAddress, from))
 			}
 			_, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 			if !exist {
-				panic(fmt.Sprintf("blsKeyString %v already be bonded by %v, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
+				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
 			}
 
 			return nil
@@ -80,23 +80,29 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 		} else {
 			if IsUnlockTx(to) {
 				return fmt.Errorf("signer %X has not bonded ", from)
-			} else if IsLockTx(to) {	//first lock
+			} else if IsLockTx(to) { //first lock
 				txData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
 					return err
+				}
+				if len(txData.BlsKeyString) == 0 {
+					return fmt.Errorf("len(txData.BlsKeyString) wrong BlsKeyString? %v", txData.BlsKeyString)
 				}
 				pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
 				if err != nil {
 					return err
 				}
 				tmAddress := pubKey.Address().String()
+				if len(tmAddress) == 0 {
+					return fmt.Errorf("len(tmAddress)==0 wrong pubKey? %v", txData.PubKey)
+				}
 				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 				if exist {
-					return fmt.Errorf("tmAddress %v already be bonded by %v", tmAddress, signer)
+					return fmt.Errorf("tmAddress %v already be bonded by %X", tmAddress, signer)
 				}
 				signer, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 				if exist {
-					return fmt.Errorf("blsKeyString %v already be bonded by %v", txData.BlsKeyString, signer)
+					return fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
 			}
 		}
@@ -110,8 +116,8 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 }
 
 func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
-	if EthPosTable == nil {	//should not happen
-	fmt.Printf("PosTable has not created yet")
+	if EthPosTable == nil { //should not happen
+		fmt.Printf("PosTable has not created yet")
 		return false, fmt.Errorf("PosTable has not created yet")
 	}
 	EthPosTable.Mtx.Lock()
@@ -123,12 +129,12 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {
 		if IsUnlockTx(to) {
-			return true, EthPosTable.RemovePosItem(from, height,false)
+			return true, EthPosTable.RemovePosItem(from, height, false)
 		} else if IsLockTx(to) { //relock
 			tmpInt := big.NewInt(0)
 			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 			if posItem.Slots >= currentSlots {
-				fmt.Printf("signer %X already bonded at height %d , balance has not increased",from, posItem.Height)
+				fmt.Printf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
 				return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
 			}
 
@@ -151,11 +157,11 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 			}
 			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 			if !exist {
-				panic(fmt.Sprintf("tmAddress %v already be bonded by %v, but not found in TmAddressToSignerMap", tmAddress, from))
+				panic(fmt.Sprintf("tmAddress %v already be bonded by %X, but not found in TmAddressToSignerMap", tmAddress, from))
 			}
 			_, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 			if !exist {
-				panic(fmt.Sprintf("blsKeyString %v already be bonded by %v, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
+				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
 			}
 			posItem.Slots = currentSlots
 			EthPosTable.UpsertPosItem(from, posItem)
@@ -185,20 +191,26 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 				if err != nil {
 					return true, err
 				}
+				if len(txData.BlsKeyString) == 0 {
+					return true,fmt.Errorf("len(txData.BlsKeyString) wrong BlsKeyString? %v", txData.BlsKeyString)
+				}
 				pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
 				if err != nil {
-					return true, err
+					return true,err
 				}
 				tmAddress := pubKey.Address().String()
+				if len(tmAddress) == 0 {
+					return true,fmt.Errorf("len(tmAddress)==0 wrong pubKey? %v", txData.PubKey)
+				}
 				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 				if exist {
-					fmt.Printf("tmAddress %v already be bonded by %v", tmAddress, signer)
-					return true, fmt.Errorf("tmAddress %v already be bonded by %v", tmAddress, signer)
+					fmt.Printf("tmAddress %v already be bonded by %X", tmAddress, signer)
+					return true, fmt.Errorf("tmAddress %v already be bonded by %X", tmAddress, signer)
 				}
 				signer, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 				if exist {
-					fmt.Printf("blsKeyString %v already be bonded by %v", txData.BlsKeyString, signer)
-					return true, fmt.Errorf("blsKeyString %v already be bonded by %v", txData.BlsKeyString, signer)
+					fmt.Printf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
+					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
 				tmpInt := big.NewInt(0)
 				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
