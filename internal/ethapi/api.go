@@ -995,12 +995,14 @@ func (s *PublicTransactionPoolAPI) GetRawTransactionByBlockHashAndIndex(ctx cont
 
 // GetTransactionCount returns the number of transactions the given address has sent for the given block number
 func (s *PublicTransactionPoolAPI) GetTransactionCount(ctx context.Context, address common.Address, blockNr rpc.BlockNumber) (*hexutil.Uint64, error) {
-	state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
+	/*state, _, err := s.b.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {
 		return nil, err
 	}
 	nonce := state.GetNonce(address)
-	return (*hexutil.Uint64)(&nonce), state.Error()
+	return (*hexutil.Uint64)(&nonce), state.Error()*/
+	nonce, err := s.b.GetPoolNonce(ctx, address)
+	return (*hexutil.Uint64)(&nonce), err
 }
 
 // GetTransactionByHash returns the transaction for the given hash
@@ -1238,7 +1240,7 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	hashes, e := submitTransaction(ctx, s.b, signed)
 	if e != nil {
 		log.Error("submitTransaction error:", "err", e.Error())
-	}else{
+	} else {
 		log.Info("tx hash", "hash", hashes.Hex())
 	}
 

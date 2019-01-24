@@ -204,7 +204,7 @@ func (posTable *PosTable) CanRemovePosItem() error {
 }
 
 func (posTable *PosTable) RemovePosItem(signer common.Address, height int64, slash bool) error {
-	fmt.Printf("signer %X remove height %v", signer, height)
+	fmt.Printf("signer %X remove at height %v", signer, height)
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
 		if len(posTable.PosItemMap) <= 4 {
 			fmt.Printf("signer %X remove height %v FAIL , len<=4!", signer, height)
@@ -228,11 +228,11 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64, sla
 		posTable.SortedPosItems.remove(posTable.PosItemIndexMap[signer].index)
 		delete(posTable.PosItemIndexMap, signer)
 		posTable.TotalSlots -= posItem.Slots
-		fmt.Printf("signer %X remove height %v SUCCESS", signer, height)
+		fmt.Printf("signer %X remove at height %v SUCCESS", signer, height)
 		return nil
 	} else {
-		fmt.Printf("signer %X remove height %v FAIL signer not exist", signer, height)
-		return fmt.Errorf("RemovePosItem. signer %v not exist in PosTable", signer)
+		fmt.Printf("signer %X remove at height %v FAIL. signer not exist", signer, height)
+		return fmt.Errorf("RemovePosItem. signer %X not exist in PosTable", signer)
 	}
 }
 
