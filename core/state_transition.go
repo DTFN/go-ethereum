@@ -208,7 +208,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	)
 
 	if contractCreation {
-		vmerr := txfilter.IsBlocked(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data())
+		vmerr := txfilter.IsBlocked(msg.From(), common.Address{}, st.state.GetBalance(msg.From()), msg.Data())
 		if vmerr == nil {
 			ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 		} else {
