@@ -240,15 +240,15 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64, sortedUnb
 	count := 0
 	posTable.Mtx.Lock()
 	defer posTable.Mtx.Unlock()
-	if len(posTable.PosItemMap) < 4 {
-		panic("TryRemoveUnbondPosItems, len(posTable.PosItemMap) < 4")
-	}
 	for _, signer := range sortedUnbondSigners {
 		posItem, ok := posTable.UnbondPosItemMap[signer]
 		if !ok {
 			panic(fmt.Sprintf("PosTable UnbondPosItemMap mismatch with SortedUnbondPosItems. %v ", posTable))
 		}
 		if (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks <= currentHeight {
+			if len(posTable.PosItemMap) < 4 {
+				panic("TryRemoveUnbondPosItems, len(posTable.PosItemMap) < 4")
+			}
 			delete(posTable.UnbondPosItemMap, signer)
 			posTable.SortedUnbondPosItems.remove(posTable.UnbondPosItemIndexMap[signer].index)
 			delete(posTable.UnbondPosItemIndexMap, signer)
@@ -338,12 +338,13 @@ type PosItem struct {
 
 func NewPosItem(height int64, slots int64, pubKey abciTypes.PubKey, tmAddress string, blsKeyString string, beneficiary common.Address) *PosItem {
 	return &PosItem{
-		Height:       height,
-		Slots:        slots,
-		PubKey:       pubKey,
-		TmAddress:    tmAddress,
-		BlsKeyString: blsKeyString,
-		Beneficiary:  beneficiary,
+		Height:           height,
+		Slots:            slots,
+		PubKey:           pubKey,
+		TmAddress:        tmAddress,
+		BlsKeyString:     blsKeyString,
+		Beneficiary:      beneficiary,
+		BeneficiaryBonus: big.NewInt(0),
 	}
 }
 
@@ -353,12 +354,13 @@ func (pi *PosItem) Copy() *PosItem {
 	copyBeneficiary := common.Address{}
 	copyBeneficiary.SetBytes(pi.Beneficiary.Bytes())
 	return &PosItem{
-		Height:       pi.Height,
-		Slots:        pi.Slots,
-		PubKey:       copyPubKey,
-		TmAddress:    pi.TmAddress,
-		BlsKeyString: pi.BlsKeyString,
-		Beneficiary:  copyBeneficiary,
+		Height:           pi.Height,
+		Slots:            pi.Slots,
+		PubKey:           copyPubKey,
+		TmAddress:        pi.TmAddress,
+		BlsKeyString:     pi.BlsKeyString,
+		Beneficiary:      copyBeneficiary,
+		BeneficiaryBonus: big.NewInt(pi.BeneficiaryBonus.Int64()),
 	}
 }
 

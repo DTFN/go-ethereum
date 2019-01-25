@@ -609,7 +609,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrInvalidSender
 	}
 	to := tx.To()
-	if tx.To() == nil {
+	if to == nil {
 		to = &common.Address{}
 	}
 	err = txfilter.IsBlocked(from, *to, pool.currentState.GetBalance(from), tx.Data())
