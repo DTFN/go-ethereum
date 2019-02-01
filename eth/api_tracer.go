@@ -97,7 +97,8 @@ func (api *PrivateDebugAPI) TraceChain(ctx context.Context, start, end rpc.Block
 
 	switch start {
 	case rpc.PendingBlockNumber:
-		from = api.eth.miner.PendingBlock()
+		from = api.eth.blockchain.CurrentBlock()	//use tendermint, no pending block now
+		//from = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
 		from = api.eth.blockchain.CurrentBlock()
 	default:
@@ -105,7 +106,8 @@ func (api *PrivateDebugAPI) TraceChain(ctx context.Context, start, end rpc.Block
 	}
 	switch end {
 	case rpc.PendingBlockNumber:
-		to = api.eth.miner.PendingBlock()
+		to = api.eth.blockchain.CurrentBlock()	//use tendermint, no pending block now
+		//to = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
 		to = api.eth.blockchain.CurrentBlock()
 	default:
@@ -339,7 +341,8 @@ func (api *PrivateDebugAPI) TraceBlockByNumber(ctx context.Context, number rpc.B
 
 	switch number {
 	case rpc.PendingBlockNumber:
-		block = api.eth.miner.PendingBlock()
+		block = api.eth.blockchain.CurrentBlock()	//use tendermint, no pending block now
+		//block = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
 		block = api.eth.blockchain.CurrentBlock()
 	default:
