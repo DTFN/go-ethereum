@@ -208,7 +208,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	)
 
 	if contractCreation {
-		vmerr := txfilter.IsBlocked(msg.From(), common.Address{}, st.state.GetBalance(msg.From()), msg.Data())
+		vmerr = txfilter.IsBlocked(msg.From(), common.Address{}, st.state.GetBalance(msg.From()), msg.Data())
 		if vmerr == nil {
 			ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 		} else {
@@ -217,7 +217,8 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-		isBetTx, vmerr := txfilter.DoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(),st.evm.BlockNumber.Int64())
+		isBetTx := false
+		isBetTx, vmerr = txfilter.DoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 		if vmerr == nil && !isBetTx {
 			ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 		}
