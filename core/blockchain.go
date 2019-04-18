@@ -109,6 +109,7 @@ type BlockChain struct {
 	checkpoint       int          // checkpoint counts towards the new checkpoint
 	currentBlock     atomic.Value // Current head of the block chain
 	currentFastBlock atomic.Value // Current head of the fast-sync chain (may be above the block chain!)
+	pendingBlock     atomic.Value // next block of current block
 
 	stateCache   state.Database // State database to reuse between imports (contains state cache)
 	bodyCache    *lru.Cache     // Cache for the most recent block bodies
@@ -225,6 +226,7 @@ func (bc *BlockChain) loadLastState() error {
 	}
 	// Everything seems to be fine, set as the head block
 	bc.currentBlock.Store(currentBlock)
+	bc.setNextBlock(currentBlock)
 
 	// Restore the last known head header
 	currentHeader := currentBlock.Header()
@@ -282,12 +284,15 @@ func (bc *BlockChain) SetHead(head uint64) error {
 
 	// Rewind the block chain, ensuring we don't end up with a stateless head block
 	if currentBlock := bc.CurrentBlock(); currentBlock != nil && currentHeader.Number.Uint64() < currentBlock.NumberU64() {
-		bc.currentBlock.Store(bc.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
+		block := bc.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64())
+		bc.currentBlock.Store(block)
+		bc.setNextBlock(block)
 	}
 	if currentBlock := bc.CurrentBlock(); currentBlock != nil {
 		if _, err := state.New(currentBlock.Root(), bc.stateCache); err != nil {
 			// Rewound state missing, rolled back to before pivot, reset to genesis
 			bc.currentBlock.Store(bc.genesisBlock)
+			bc.setNextBlock(bc.genesisBlock)
 		}
 	}
 	// Rewind the fast block in a simpleton way to the target head
@@ -297,6 +302,7 @@ func (bc *BlockChain) SetHead(head uint64) error {
 	// If either blocks reached nil, reset to the genesis state
 	if currentBlock := bc.CurrentBlock(); currentBlock == nil {
 		bc.currentBlock.Store(bc.genesisBlock)
+		bc.setNextBlock(bc.genesisBlock)
 	}
 	if currentFastBlock := bc.CurrentFastBlock(); currentFastBlock == nil {
 		bc.currentFastBlock.Store(bc.genesisBlock)
@@ -326,6 +332,7 @@ func (bc *BlockChain) FastSyncCommitHead(hash common.Hash) error {
 	// If all checks out, manually set the head block
 	bc.mu.Lock()
 	bc.currentBlock.Store(block)
+	bc.setNextBlock(block)
 	bc.mu.Unlock()
 
 	log.Info("Committed new head block", "number", block.Number(), "hash", hash)
@@ -347,6 +354,10 @@ func (bc *BlockChain) CurrentBlock() *types.Block {
 // chain. The block is retrieved from the blockchain's internal cache.
 func (bc *BlockChain) CurrentFastBlock() *types.Block {
 	return bc.currentFastBlock.Load().(*types.Block)
+}
+
+func (bc *BlockChain) PendingBlock() *types.Block {
+	return bc.pendingBlock.Load().(*types.Block)
 }
 
 // SetProcessor sets the processor required for making state modifications.
@@ -412,6 +423,7 @@ func (bc *BlockChain) ResetWithGenesisBlock(genesis *types.Block) error {
 	bc.genesisBlock = genesis
 	bc.insert(bc.genesisBlock)
 	bc.currentBlock.Store(bc.genesisBlock)
+	bc.setNextBlock(bc.genesisBlock)
 	bc.hc.SetGenesis(bc.genesisBlock.Header())
 	bc.hc.SetCurrentHeader(bc.genesisBlock.Header())
 	bc.currentFastBlock.Store(bc.genesisBlock)
@@ -483,7 +495,9 @@ func (bc *BlockChain) insert(block *types.Block) {
 	if err := WriteHeadBlockHash(bc.db, block.Hash()); err != nil {
 		log.Crit("Failed to insert head block hash", "err", err)
 	}
+
 	bc.currentBlock.Store(block)
+	bc.setNextBlock(block)
 
 	// If the block is better than our head or is on a different chain, force update heads
 	if updateHeads {
@@ -494,6 +508,17 @@ func (bc *BlockChain) insert(block *types.Block) {
 		}
 		bc.currentFastBlock.Store(block)
 	}
+}
+
+func (bc *BlockChain) setNextBlock(block *types.Block) {
+	num := block.Number()
+	header := &types.Header{
+		ParentHash: block.Hash(),
+		Number:     num.Add(num, common.Big1),
+		GasLimit:   CalcGasLimit(block),
+		Time:       big.NewInt(time.Now().Unix()),
+	}
+	bc.pendingBlock.Store(types.NewBlockWithHeader(header))
 }
 
 // Genesis retrieves the chain's genesis block.
@@ -691,7 +716,7 @@ func (bc *BlockChain) procFutureBlocks() {
 type WriteStatus byte
 
 const (
-	NonStatTy WriteStatus = iota
+	NonStatTy   WriteStatus = iota
 	CanonStatTy
 	SideStatTy
 )
@@ -717,6 +742,7 @@ func (bc *BlockChain) Rollback(chain []common.Hash) {
 		if currentBlock := bc.CurrentBlock(); currentBlock.Hash() == hash {
 			newBlock := bc.GetBlock(currentBlock.ParentHash(), currentBlock.NumberU64()-1)
 			bc.currentBlock.Store(newBlock)
+			bc.setNextBlock(newBlock)
 			WriteHeadBlockHash(bc.db, newBlock.Hash())
 		}
 	}
@@ -1538,7 +1564,7 @@ func (bc *BlockChain) Config() *params.ChainConfig { return bc.chainConfig }
 // Engine retrieves the blockchain's consensus engine.
 func (bc *BlockChain) Engine() consensus.Engine { return bc.engine }
 
-func (bc *BlockChain) AddGcproc(duration time.Duration) { bc.gcproc+=duration }
+func (bc *BlockChain) AddGcproc(duration time.Duration) { bc.gcproc += duration }
 
 // SubscribeRemovedLogsEvent registers a subscription of RemovedLogsEvent.
 func (bc *BlockChain) SubscribeRemovedLogsEvent(ch chan<- RemovedLogsEvent) event.Subscription {
