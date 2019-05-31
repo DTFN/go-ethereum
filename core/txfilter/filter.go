@@ -81,6 +81,12 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 			if IsUnlockTx(to) {
 				return fmt.Errorf("signer %X has not bonded ", from)
 			} else if IsLockTx(to) { //first lock
+				tmpInt := big.NewInt(0)
+				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+				if 1 > currentSlots {
+					fmt.Printf("signer %X doesn't have one slot of money", from)
+					return fmt.Errorf("signer %X doesn't have one slot of money", from)
+				}
 				txData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
 					return err
@@ -192,15 +198,15 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 					return true, err
 				}
 				if len(txData.BlsKeyString) == 0 {
-					return true,fmt.Errorf("len(txData.BlsKeyString)==0, wrong BlsKeyString? %v", txData.BlsKeyString)
+					return true, fmt.Errorf("len(txData.BlsKeyString)==0, wrong BlsKeyString? %v", txData.BlsKeyString)
 				}
 				pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
 				if err != nil {
-					return true,err
+					return true, err
 				}
 				tmAddress := pubKey.Address().String()
 				if len(tmAddress) == 0 {
-					return true,fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
+					return true, fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
 				}
 				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 				if exist {
@@ -214,6 +220,10 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 				}
 				tmpInt := big.NewInt(0)
 				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+				if 1 > currentSlots {
+					fmt.Printf("signer %X doesn't have one slot of money", from)
+					return false, fmt.Errorf("signer %X doesn't have one slot of money", from)
+				}
 				return true, EthPosTable.UpsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
 			}
 		}
