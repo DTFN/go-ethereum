@@ -222,7 +222,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 				if 1 > currentSlots {
 					fmt.Printf("signer %X doesn't have one slot of money", from)
-					return false, fmt.Errorf("signer %X doesn't have one slot of money", from)
+					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
 				return true, EthPosTable.UpsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
 			}
