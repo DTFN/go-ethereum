@@ -220,7 +220,6 @@ type TxPool struct {
 	all       map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced    *txPricedList                      // All transactions sorted by price
 	inCommit  bool
-	cmu       sync.RWMutex
 	cachedTxs chan TxCallback
 
 	wg sync.WaitGroup // for shutdown sync
@@ -306,13 +305,17 @@ func (pool *TxPool) loop() {
 			if ev.Block != nil {
 				pool.inCommit = true
 				pool.mu.Lock()
+				pool.inCommit = false
 				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
 					pool.homestead = true
 				}
 				pool.reset(head.Header(), ev.Block.Header())
 				head = ev.Block
-
+				pool.cachedTxs<-TxCallback{nil,false,nil} //an indicator
 				for txCallback := range pool.cachedTxs {
+					if txCallback.tx==nil{	//receive the indicator
+						break
+					}
 					// Try to inject the transaction and update any state
 					replace, err := pool.add(txCallback.tx, txCallback.local)
 					if err != nil {
@@ -326,7 +329,6 @@ func (pool *TxPool) loop() {
 					}
 					txCallback.callback <- nil
 				}
-				pool.inCommit = false
 				pool.mu.Unlock()
 			}
 			// Be unsubscribed due to system stopped
