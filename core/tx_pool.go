@@ -311,9 +311,9 @@ func (pool *TxPool) loop() {
 				}
 				pool.reset(head.Header(), ev.Block.Header())
 				head = ev.Block
-				pool.cachedTxs<-TxCallback{nil,false,nil} //an indicator
+				pool.cachedTxs <- TxCallback{nil, false, nil} //an indicator
 				for txCallback := range pool.cachedTxs {
-					if txCallback.tx==nil{	//receive the indicator
+					if txCallback.tx == nil { //receive the indicator
 						break
 					}
 					// Try to inject the transaction and update any state
