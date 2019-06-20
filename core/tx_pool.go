@@ -304,7 +304,9 @@ func (pool *TxPool) loop() {
 		case ev := <-pool.chainHeadCh:
 			if ev.Block != nil {
 				pool.inCommit = true
+				fmt.Println("===========pool.chainHeadCh")
 				pool.mu.Lock()
+				fmt.Println("===========chainHeadCh get lock")
 				pool.inCommit = false
 				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
 					pool.homestead = true
@@ -316,6 +318,7 @@ func (pool *TxPool) loop() {
 					if txCallback.tx == nil { //receive the indicator
 						break
 					}
+					fmt.Println("======handling a tx")
 					// Try to inject the transaction and update any state
 					replace, err := pool.add(txCallback.tx, txCallback.local)
 					if err != nil {
@@ -868,7 +871,10 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if pool.inCommit {
 		callback := make(chan error, 1)
 		pool.cachedTxs <- TxCallback{tx, local, callback}
-		return <-callback
+		fmt.Println("---------------addTx put into cacheTxs")
+		err:= <-callback
+		fmt.Println("---------------addTx callback")
+		return err
 	}
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
