@@ -41,6 +41,8 @@ const (
 	chainHeadChanSize = 0
 	// rmTxChanSize is the size of channel listening to RemovedTransactionEvent.
 	rmTxChanSize = 10
+
+	cachedTxSize = 100000
 )
 
 var (
@@ -180,6 +182,12 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 	return conf
 }
 
+type TxCallback struct {
+	tx       *types.Transaction
+	local    bool
+	callback chan error
+}
+
 // TxPool contains all currently known transactions. Transactions
 // enter the pool when they are received from the network or submitted
 // locally. They exit the pool when they are included in the blockchain.
@@ -206,11 +214,14 @@ type TxPool struct {
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	journal *txJournal  // Journal of local transaction to back up to disk
 
-	pending map[common.Address]*txList         // All currently processable transactions
-	queue   map[common.Address]*txList         // Queued but non-processable transactions
-	beats   map[common.Address]time.Time       // Last heartbeat from each known account
-	all     map[common.Hash]*types.Transaction // All transactions to allow lookups
-	priced  *txPricedList                      // All transactions sorted by price
+	pending   map[common.Address]*txList         // All currently processable transactions
+	queue     map[common.Address]*txList         // Queued but non-processable transactions
+	beats     map[common.Address]time.Time       // Last heartbeat from each known account
+	all       map[common.Hash]*types.Transaction // All transactions to allow lookups
+	priced    *txPricedList                      // All transactions sorted by price
+	inCommit  bool
+	cmu       sync.RWMutex
+	cachedTxs chan TxCallback
 
 	wg sync.WaitGroup // for shutdown sync
 
@@ -234,6 +245,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		beats:       make(map[common.Address]time.Time),
 		all:         make(map[common.Hash]*types.Transaction),
 		chainHeadCh: make(chan ChainHeadEvent, chainHeadChanSize),
+		cachedTxs:   make(chan TxCallback, cachedTxSize),
 		gasPrice:    new(big.Int).SetUint64(config.PriceLimit),
 	}
 	pool.locals = newAccountSet(pool.signer)
@@ -292,6 +304,7 @@ func (pool *TxPool) loop() {
 		// Handle ChainHeadEvent
 		case ev := <-pool.chainHeadCh:
 			if ev.Block != nil {
+				pool.inCommit = true
 				pool.mu.Lock()
 				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
 					pool.homestead = true
@@ -299,6 +312,21 @@ func (pool *TxPool) loop() {
 				pool.reset(head.Header(), ev.Block.Header())
 				head = ev.Block
 
+				for txCallback := range pool.cachedTxs {
+					// Try to inject the transaction and update any state
+					replace, err := pool.add(txCallback.tx, txCallback.local)
+					if err != nil {
+						txCallback.callback <- err
+						continue
+					}
+					// If we added a new transaction, run promotion checks and return
+					if !replace {
+						from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
+						pool.promoteExecutables([]common.Address{from})
+					}
+					txCallback.callback <- nil
+				}
+				pool.inCommit = false
 				pool.mu.Unlock()
 			}
 			// Be unsubscribed due to system stopped
@@ -835,6 +863,11 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 
 // addTx enqueues a single transaction into the pool if it is valid.
 func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
+	if pool.inCommit {
+		callback := make(chan error, 1)
+		pool.cachedTxs <- TxCallback{tx, local, callback}
+		return <-callback
+	}
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
@@ -854,6 +887,19 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 
 // addTxs attempts to queue a batch of transactions if they are valid.
 func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
+	if pool.inCommit {
+		errs := make([]error, len(txs))
+		callbacks := make([]chan error, len(txs))
+		for i, tx := range txs {
+			callback := make(chan error, 1)
+			pool.cachedTxs <- TxCallback{tx, local, callback}
+			callbacks[i] = callback
+		}
+		for i, callback := range callbacks {
+			errs[i] = <-callback
+		}
+		return errs
+	}
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
