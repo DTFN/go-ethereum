@@ -321,7 +321,7 @@ func (pool *TxPool) loop() {
 					// Try to inject the transaction and update any state
 					replace, err := pool.add(txCallback.tx, txCallback.local)
 					if err != nil {
-						txCallback.callback <- err
+						txCallback.Result <- err
 						continue
 					}
 					// If we added a new transaction, run promotion checks and return
@@ -330,11 +330,11 @@ func (pool *TxPool) loop() {
 						pool.promoteExecutables([]common.Address{from})
 					}
 					if txPreEvent, ok := pool.pendingTxPreEvents[txCallback.tx.Hash()]; ok {
-						err = <-txPreEvent.Callback
+						err = <-txPreEvent.Result
 						delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
 						txCallback.callback <- err
 					}
-					txCallback.callback <- nil
+					txCallback.Result <- nil
 				}
 				pool.mu.Unlock()
 			}
