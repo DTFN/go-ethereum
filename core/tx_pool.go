@@ -840,7 +840,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
 
-	callback := make(chan error, 1)
+	callback := make(chan error, 2)
 	txPreEvent := TxPreEvent{tx, callback}
 	pool.pendingTxPreEvents[tx.Hash()] = &txPreEvent
 	pool.txFeed.Send(txPreEvent) //leilei delete go routine call for ethermint checkTx
@@ -883,8 +883,6 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		return err
 	}
 	pool.mu.Lock()
-	defer pool.mu.Unlock()
-
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
 	if err != nil {
@@ -896,13 +894,17 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		pool.promoteExecutables([]common.Address{from})
 	}
 
-	if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
-		err = <-txPreEvent.Result
+	txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]
+	if ok {
 		delete(pool.pendingTxPreEvents, tx.Hash())
-		return err
+	} else {
+		pool.mu.Unlock()
+		return nil
 	}
+	pool.mu.Unlock()
 
-	return nil
+	err = <-txPreEvent.Result
+	return err
 }
 
 // addTxs attempts to queue a batch of transactions if they are valid.
@@ -921,9 +923,25 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		return errs
 	}
 	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	errs := pool.addTxsLocked(txs, local)
+	results := make([]chan error, len(txs))
+	for i, tx := range txs {
+		if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
+			results[i] = txPreEvent.Result
+			delete(pool.pendingTxPreEvents, tx.Hash())
+			continue
+		}
+		results[i] = make(chan error, 1)
+		results[i] <- errs[i]
+	}
+	pool.mu.Unlock()
 
-	return pool.addTxsLocked(txs, local)
+	for i, result := range results {
+		err := <-result
+		errs[i] = err
+	}
+
+	return errs
 }
 
 // addTxsLocked attempts to queue a batch of transactions if they are valid,
@@ -949,14 +967,6 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 			addrs = append(addrs, addr)
 		}
 		pool.promoteExecutables(addrs)
-	}
-
-	for i, tx := range txs {
-		if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
-			err := <-txPreEvent.Result
-			delete(pool.pendingTxPreEvents, tx.Hash())
-			errs[i] = err
-		}
 	}
 
 	return errs
