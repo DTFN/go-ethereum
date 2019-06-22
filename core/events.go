@@ -22,7 +22,10 @@ import (
 )
 
 // TxPreEvent is posted when a transaction enters the transaction pool.
-type TxPreEvent struct{ Tx *types.Transaction }
+type TxPreEvent struct {
+	Tx       *types.Transaction
+	Callback chan error
+}
 
 // PendingLogsEvent is posted pre mining and notifies of pending logs.
 type PendingLogsEvent struct {

@@ -214,13 +214,14 @@ type TxPool struct {
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	journal *txJournal  // Journal of local transaction to back up to disk
 
-	pending   map[common.Address]*txList         // All currently processable transactions
-	queue     map[common.Address]*txList         // Queued but non-processable transactions
-	beats     map[common.Address]time.Time       // Last heartbeat from each known account
-	all       map[common.Hash]*types.Transaction // All transactions to allow lookups
-	priced    *txPricedList                      // All transactions sorted by price
-	inCommit  bool
-	cachedTxs chan TxCallback
+	pending            map[common.Address]*txList         // All currently processable transactions
+	queue              map[common.Address]*txList         // Queued but non-processable transactions
+	beats              map[common.Address]time.Time       // Last heartbeat from each known account
+	all                map[common.Hash]*types.Transaction // All transactions to allow lookups
+	priced             *txPricedList                      // All transactions sorted by price
+	inCommit           bool
+	cachedTxs          chan TxCallback
+	pendingTxPreEvents map[common.Hash]*TxPreEvent
 
 	wg sync.WaitGroup // for shutdown sync
 
@@ -304,9 +305,7 @@ func (pool *TxPool) loop() {
 		case ev := <-pool.chainHeadCh:
 			if ev.Block != nil {
 				pool.inCommit = true
-				fmt.Println("===========pool.chainHeadCh")
 				pool.mu.Lock()
-				fmt.Println("===========chainHeadCh get lock")
 				pool.inCommit = false
 				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
 					pool.homestead = true
@@ -318,7 +317,6 @@ func (pool *TxPool) loop() {
 					if txCallback.tx == nil { //receive the indicator
 						break
 					}
-					fmt.Println("======handling a tx")
 					// Try to inject the transaction and update any state
 					replace, err := pool.add(txCallback.tx, txCallback.local)
 					if err != nil {
@@ -329,6 +327,11 @@ func (pool *TxPool) loop() {
 					if !replace {
 						from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
 						pool.promoteExecutables([]common.Address{from})
+					}
+					if txPreEvent, ok := pool.pendingTxPreEvents[txCallback.tx.Hash()]; ok {
+						err = <-txPreEvent.Callback
+						delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
+						txCallback.callback <- err
 					}
 					txCallback.callback <- nil
 				}
@@ -742,7 +745,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
 
 		// We've directly injected a replacement transaction, notify subsystems
-		pool.txFeed.Send(TxPreEvent{tx}) //leilei delete go routine call for ethermint checkTx
+		//pool.txFeed.Send(TxPreEvent{tx}) //leilei delete go routine call for ethermint checkTx
 
 		return old != nil, nil
 	}
@@ -835,7 +838,11 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	// Set the potentially new pending nonce and notify any subsystems of the new tx
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
-	pool.txFeed.Send(TxPreEvent{tx}) //leilei delete go routine call for ethermint checkTx
+
+	callback := make(chan error, 1)
+	txPreEvent := TxPreEvent{tx, callback}
+	pool.pendingTxPreEvents[tx.Hash()] = &txPreEvent
+	pool.txFeed.Send(txPreEvent) //leilei delete go routine call for ethermint checkTx
 }
 
 // AddLocal enqueues a single transaction into the pool if it is valid, marking
@@ -871,9 +878,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if pool.inCommit {
 		callback := make(chan error, 1)
 		pool.cachedTxs <- TxCallback{tx, local, callback}
-		fmt.Println("---------------addTx put into cacheTxs")
-		err:= <-callback
-		fmt.Println("---------------addTx callback")
+		err := <-callback
 		return err
 	}
 	pool.mu.Lock()
@@ -888,6 +893,12 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if !replace {
 		from, _ := types.Sender(pool.signer, tx) // already validated
 		pool.promoteExecutables([]common.Address{from})
+	}
+
+	if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
+		err = <-txPreEvent.Callback
+		delete(pool.pendingTxPreEvents, tx.Hash())
+		return err
 	}
 
 	return nil
@@ -938,6 +949,15 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 		}
 		pool.promoteExecutables(addrs)
 	}
+
+	for i, tx := range txs {
+		if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
+			err := <-txPreEvent.Callback
+			delete(pool.pendingTxPreEvents, tx.Hash())
+			errs[i] = err
+		}
+	}
+
 	return errs
 }
 
@@ -985,6 +1005,12 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	if outofbound {
 		pool.priced.Removed()
 	}
+
+	if txPreEvent := pool.pendingTxPreEvents[hash]; txPreEvent != nil {
+		delete(pool.pendingTxPreEvents, hash)
+		txPreEvent.Callback <- errors.New("tx has been removed")
+	}
+
 	// Remove the transaction from the pending lists and reset the account nonce
 	if pending := pool.pending[addr]; pending != nil {
 		if removed, invalids := pending.Remove(tx); removed {
@@ -1209,6 +1235,10 @@ func (pool *TxPool) demoteUnexecutables() {
 			log.Trace("Removed old pending transaction", "hash", hash)
 			delete(pool.all, hash)
 			pool.priced.Removed()
+			if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
+				delete(pool.pendingTxPreEvents, tx.Hash())
+				txPreEvent.Callback <- errors.New("greater nonce transaction found in the block")
+			}
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
 		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
