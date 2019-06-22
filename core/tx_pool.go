@@ -183,9 +183,9 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 }
 
 type TxCallback struct {
-	tx       *types.Transaction
-	local    bool
-	callback chan error
+	tx     *types.Transaction
+	local  bool
+	Result chan error
 }
 
 // TxPool contains all currently known transactions. Transactions
@@ -236,17 +236,18 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-		config:      config,
-		chainconfig: chainconfig,
-		chain:       chain,
-		signer:      types.NewEIP155Signer(chainconfig.ChainId),
-		pending:     make(map[common.Address]*txList),
-		queue:       make(map[common.Address]*txList),
-		beats:       make(map[common.Address]time.Time),
-		all:         make(map[common.Hash]*types.Transaction),
-		chainHeadCh: make(chan ChainHeadEvent, chainHeadChanSize),
-		cachedTxs:   make(chan TxCallback, cachedTxSize),
-		gasPrice:    new(big.Int).SetUint64(config.PriceLimit),
+		config:             config,
+		chainconfig:        chainconfig,
+		chain:              chain,
+		signer:             types.NewEIP155Signer(chainconfig.ChainId),
+		pending:            make(map[common.Address]*txList),
+		queue:              make(map[common.Address]*txList),
+		beats:              make(map[common.Address]time.Time),
+		all:                make(map[common.Hash]*types.Transaction),
+		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
+		cachedTxs:          make(chan TxCallback, cachedTxSize),
+		pendingTxPreEvents: make(map[common.Hash]*TxPreEvent),
+		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
@@ -952,7 +953,7 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 
 	for i, tx := range txs {
 		if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
-			err := <-txPreEvent.Callback
+			err := <-txPreEvent.Result
 			delete(pool.pendingTxPreEvents, tx.Hash())
 			errs[i] = err
 		}
@@ -1008,7 +1009,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 
 	if txPreEvent := pool.pendingTxPreEvents[hash]; txPreEvent != nil {
 		delete(pool.pendingTxPreEvents, hash)
-		txPreEvent.Callback <- errors.New("tx has been removed")
+		txPreEvent.Result <- errors.New("tx has been removed")
 	}
 
 	// Remove the transaction from the pending lists and reset the account nonce
@@ -1237,7 +1238,7 @@ func (pool *TxPool) demoteUnexecutables() {
 			pool.priced.Removed()
 			if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
 				delete(pool.pendingTxPreEvents, tx.Hash())
-				txPreEvent.Callback <- errors.New("greater nonce transaction found in the block")
+				txPreEvent.Result <- errors.New("greater nonce transaction found in the block")
 			}
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
