@@ -185,7 +185,7 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 type TxCallback struct {
 	tx     *types.Transaction
 	local  bool
-	Result chan error
+	result chan error
 }
 
 // TxPool contains all currently known transactions. Transactions
@@ -321,7 +321,7 @@ func (pool *TxPool) loop() {
 					// Try to inject the transaction and update any state
 					replace, err := pool.add(txCallback.tx, txCallback.local)
 					if err != nil {
-						txCallback.Result <- err
+						txCallback.result <- err
 						continue
 					}
 					// If we added a new transaction, run promotion checks and return
@@ -332,9 +332,9 @@ func (pool *TxPool) loop() {
 					if txPreEvent, ok := pool.pendingTxPreEvents[txCallback.tx.Hash()]; ok {
 						err = <-txPreEvent.Result
 						delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-						txCallback.callback <- err
+						txCallback.result <- err
 					}
-					txCallback.Result <- nil
+					txCallback.result <- nil
 				}
 				pool.mu.Unlock()
 			}
@@ -897,7 +897,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	}
 
 	if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
-		err = <-txPreEvent.Callback
+		err = <-txPreEvent.Result
 		delete(pool.pendingTxPreEvents, tx.Hash())
 		return err
 	}
