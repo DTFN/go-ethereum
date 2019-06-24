@@ -324,17 +324,19 @@ func (pool *TxPool) loop() {
 						txCallback.result <- err
 						continue
 					}
+					txPreEvent := &TxPreEvent{}
+					pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
 					// If we added a new transaction, run promotion checks and return
 					if !replace {
 						from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
 						pool.promoteExecutables([]common.Address{from})
 					}
-					if txPreEvent, ok := pool.pendingTxPreEvents[txCallback.tx.Hash()]; ok {
+					delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
+					pool.mu.Unlock()
+					if txPreEvent.Result != nil { //put into queue but not into pending
 						err = <-txPreEvent.Result
-						delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-						txCallback.result <- err
 					}
-					txCallback.result <- nil
+					txCallback.result <- err
 				}
 				pool.mu.Unlock()
 			}
@@ -840,10 +842,13 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
 
-	callback := make(chan error, 2)
-	txPreEvent := TxPreEvent{tx, callback}
-	pool.pendingTxPreEvents[tx.Hash()] = &txPreEvent
-	pool.txFeed.Send(txPreEvent) //leilei delete go routine call for ethermint checkTx
+	txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]
+	if !ok {
+		txPreEvent = &TxPreEvent{}
+	}
+	txPreEvent.Tx = tx
+	txPreEvent.Result = make(chan error, 2)
+	pool.txFeed.Send(*txPreEvent) //leilei delete go routine call for ethermint checkTx
 }
 
 // AddLocal enqueues a single transaction into the pool if it is valid, marking
@@ -888,16 +893,15 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return err
 	}
+	txPreEvent := &TxPreEvent{}
+	pool.pendingTxPreEvents[tx.Hash()] = txPreEvent
 	// If we added a new transaction, run promotion checks and return
 	if !replace {
 		from, _ := types.Sender(pool.signer, tx) // already validated
 		pool.promoteExecutables([]common.Address{from})
 	}
-
-	txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]
-	if ok {
-		delete(pool.pendingTxPreEvents, tx.Hash())
-	} else {
+	delete(pool.pendingTxPreEvents, tx.Hash())
+	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
 		return nil
 	}
@@ -927,9 +931,12 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	results := make([]chan error, len(txs))
 	for i, tx := range txs {
 		if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
-			results[i] = txPreEvent.Result
+			if txPreEvent.Result != nil {
+				results[i] = txPreEvent.Result
+				continue
+			}
 			delete(pool.pendingTxPreEvents, tx.Hash())
-			continue
+
 		}
 		results[i] = make(chan error, 1)
 		results[i] <- errs[i]
@@ -957,6 +964,8 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 			if !replace {
 				from, _ := types.Sender(pool.signer, tx) // already validated
 				dirty[from] = struct{}{}
+				txPreEvent := &TxPreEvent{}
+				pool.pendingTxPreEvents[tx.Hash()] = txPreEvent
 			}
 		}
 	}
@@ -1018,7 +1027,6 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	}
 
 	if txPreEvent := pool.pendingTxPreEvents[hash]; txPreEvent != nil {
-		delete(pool.pendingTxPreEvents, hash)
 		txPreEvent.Result <- errors.New("tx has been removed")
 	}
 
@@ -1247,7 +1255,6 @@ func (pool *TxPool) demoteUnexecutables() {
 			delete(pool.all, hash)
 			pool.priced.Removed()
 			if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
-				delete(pool.pendingTxPreEvents, tx.Hash())
 				txPreEvent.Result <- errors.New("greater nonce transaction found in the block")
 			}
 		}
