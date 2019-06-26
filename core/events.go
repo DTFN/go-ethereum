@@ -23,7 +23,8 @@ import (
 
 // TxPreEvent is posted when a transaction enters the transaction pool.
 type TxPreEvent struct {
-	Tx       *types.Transaction
+	Tx     *types.Transaction
+	From   common.Address
 	Result chan error
 }
 
