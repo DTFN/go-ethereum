@@ -846,6 +846,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	if !ok {
 		txPreEvent = &TxPreEvent{}
 	}
+	txPreEvent.From = addr
 	txPreEvent.Tx = tx
 	txPreEvent.Result = make(chan error, 2)
 	pool.txFeed.Send(*txPreEvent) //leilei delete go routine call for ethermint checkTx
