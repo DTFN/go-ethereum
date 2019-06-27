@@ -86,13 +86,13 @@ func ApplyTransactionFacade(config *params.ChainConfig, bc *BlockChain, author *
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	r, u, e := ApplyTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
+	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
 	return r, msg, u, e
 }
 
 func ApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
 	msg, _ := tx.AsMessageWithFrom(from)
-	r, u, e := ApplyTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
+	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
 	return r, msg, u, e
 }
 
@@ -105,6 +105,10 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	if err != nil {
 		return nil, 0, err
 	}
+	return applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
+}
+
+func applyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
