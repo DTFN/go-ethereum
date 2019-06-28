@@ -6,12 +6,16 @@ import (
 	"strings"
 	"fmt"
 	"math/big"
+	"errors"
 )
 
 var (
 	sendToLock   = common.HexToAddress("0x7777777777777777777777777777777777777777")
 	sendToUnlock = common.HexToAddress("0x8888888888888888888888888888888888888888")
 	w            = make(map[common.Address]bool)
+
+	ErrPosTableNotCreate = errors.New("PosTable has not created yet")
+	ErrPosTableNotInit   = errors.New("PosTable has not init yet")
 )
 
 func init() {
@@ -21,12 +25,12 @@ func init() {
 
 func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
 	if EthPosTable == nil {
-		return fmt.Errorf("PosTable has not created yet")
+		return ErrPosTableNotCreate
 	}
 	EthPosTable.Mtx.RLock()
 	defer EthPosTable.Mtx.RUnlock()
 	if !EthPosTable.InitFlag {
-		return fmt.Errorf("PosTable has not init yet")
+		return ErrPosTableNotInit
 	}
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {
@@ -124,13 +128,13 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
 	if EthPosTable == nil { //should not happen
 		fmt.Printf("PosTable has not created yet")
-		return false, fmt.Errorf("PosTable has not created yet")
+		return false, ErrPosTableNotCreate
 	}
 	EthPosTable.Mtx.Lock()
 	defer EthPosTable.Mtx.Unlock()
 	if !EthPosTable.InitFlag { //should not happen
 		fmt.Printf("PosTable has not init yet")
-		return false, fmt.Errorf("PosTable has not init yet")
+		return false, ErrPosTableNotInit
 	}
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {

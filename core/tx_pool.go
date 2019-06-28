@@ -253,6 +253,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	pool.priced = newTxPricedList(&pool.all)
 	pool.reset(nil, chain.CurrentBlock().Header())
 
+	pool.inCommit = true //posTable has not init, txs in the journal put into cache list
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
@@ -332,7 +333,6 @@ func (pool *TxPool) loop() {
 						pool.promoteExecutables([]common.Address{from})
 					}
 					delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-					pool.mu.Unlock()
 					if txPreEvent.Result != nil { //put into queue but not into pending
 						err = <-txPreEvent.Result
 					}
@@ -892,6 +892,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
 	if err != nil {
+		pool.mu.Unlock()
 		return err
 	}
 	txPreEvent := &TxPreEvent{}
