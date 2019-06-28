@@ -882,7 +882,7 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 func (pool *TxPool) AddTxsToCache(txs []*types.Transaction) error {
 	for _, tx := range txs {
 		callback := make(chan error, 1)
-		pool.cachedTxs <- TxCallback{tx, local, callback}
+		pool.cachedTxs <- TxCallback{tx, true, callback}
 	}
 	return nil
 }
