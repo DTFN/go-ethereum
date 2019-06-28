@@ -332,10 +332,12 @@ func (pool *TxPool) loop() {
 						pool.promoteExecutables([]common.Address{from})
 					}
 					delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-					if txPreEvent.Result != nil { //put into queue but not into pending
-						err = <-txPreEvent.Result
+					if txCallback.result != nil {
+						if txPreEvent.Result != nil { //put into queue but not into pending
+							err = <-txPreEvent.Result
+						}
+						txCallback.result <- err
 					}
-					txCallback.result <- err
 				}
 				pool.mu.Unlock()
 			}
@@ -879,9 +881,9 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 	return pool.addTxs(txs, false)
 }
 
+// AddTxToCache is called in NewTxPool
 func (pool *TxPool) AddTxToCache(tx *types.Transaction) error {
-	callback := make(chan error, 1)
-	pool.cachedTxs <- TxCallback{tx, true, callback}
+	pool.cachedTxs <- TxCallback{tx, true, nil}
 	return nil
 }
 
