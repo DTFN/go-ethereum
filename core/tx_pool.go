@@ -253,17 +253,16 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	pool.priced = newTxPricedList(&pool.all)
 	pool.reset(nil, chain.CurrentBlock().Header())
 
-	pool.inCommit = true //posTable has not init, txs in the journal put into cache list
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
 
-		if err := pool.journal.load(pool.AddLocal); err != nil {
+		if err := pool.journal.load(pool.AddTxsToCache); err != nil { //don't call addTx because PosTable has not init yet
 			log.Warn("Failed to load transaction journal", "err", err)
 		}
-		if err := pool.journal.rotate(pool.local()); err != nil {
-			log.Warn("Failed to rotate transaction journal", "err", err)
-		}
+		/*	if err := pool.journal.rotate(pool.local()); err != nil {
+				log.Warn("Failed to rotate transaction journal", "err", err)
+			}*/
 	}
 	// Subscribe events from blockchain
 	pool.chainHeadSub = pool.chain.SubscribeChainHeadEvent(pool.chainHeadCh)
@@ -878,6 +877,14 @@ func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
 // will apply.
 func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 	return pool.addTxs(txs, false)
+}
+
+func (pool *TxPool) AddTxsToCache(txs []*types.Transaction) error {
+	for _, tx := range txs {
+		callback := make(chan error, 1)
+		pool.cachedTxs <- TxCallback{tx, local, callback}
+	}
+	return nil
 }
 
 // addTx enqueues a single transaction into the pool if it is valid.
