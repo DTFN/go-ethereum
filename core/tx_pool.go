@@ -257,7 +257,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
 
-		if err := pool.journal.load(pool.AddTxsToCache); err != nil { //don't call addTx because PosTable has not init yet
+		if err := pool.journal.load(pool.AddTxToCache); err != nil { //don't call addTx because PosTable has not init yet
 			log.Warn("Failed to load transaction journal", "err", err)
 		}
 		/*	if err := pool.journal.rotate(pool.local()); err != nil {
@@ -879,11 +879,9 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 	return pool.addTxs(txs, false)
 }
 
-func (pool *TxPool) AddTxsToCache(txs []*types.Transaction) error {
-	for _, tx := range txs {
-		callback := make(chan error, 1)
-		pool.cachedTxs <- TxCallback{tx, true, callback}
-	}
+func (pool *TxPool) AddTxToCache(tx *types.Transaction) error {
+	callback := make(chan error, 1)
+	pool.cachedTxs <- TxCallback{tx, true, callback}
 	return nil
 }
 
