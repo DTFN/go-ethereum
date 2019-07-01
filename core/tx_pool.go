@@ -299,6 +299,24 @@ func (pool *TxPool) loop() {
 	// Track the previous head headers for transaction reorgs
 	head := pool.chain.CurrentBlock()
 
+	if pool.scope.Count() == 0 {
+		for {
+			select {
+			// Handle ChainHeadEvent
+			case ev := <-pool.chainHeadCh:
+				pool.mu.Lock()
+				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
+					pool.homestead = true
+				}
+				pool.reset(head.Header(), ev.Block.Header())
+				head = ev.Block
+				pool.mu.Unlock()
+			}
+			if pool.scope.Count() != 0 {	//gelchain begins to consume TxPreEvent
+				break
+			}
+		}
+	}
 	// Keep waiting for and reacting to the various events
 	for {
 		select {
@@ -849,7 +867,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	}
 	txPreEvent.From = addr
 	txPreEvent.Tx = tx
-	txPreEvent.Result = make(chan error, 5)
+	txPreEvent.Result = make(chan error, 2)
 	pool.txFeed.Send(*txPreEvent) //leilei delete go routine call for ethermint checkTx
 }
 
