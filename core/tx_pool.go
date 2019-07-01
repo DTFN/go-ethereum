@@ -337,6 +337,7 @@ func (pool *TxPool) loop() {
 				pool.reset(head.Header(), ev.Block.Header())
 				head = ev.Block
 				pool.cachedTxs <- TxCallback{nil, false, nil} //an indicator
+				fmt.Println("===============loop put indicator into cachedTxs")
 				for txCallback := range pool.cachedTxs {
 					if txCallback.tx == nil { //receive the indicator
 						break
@@ -344,7 +345,9 @@ func (pool *TxPool) loop() {
 					// Try to inject the transaction and update any state
 					replace, err := pool.add(txCallback.tx, txCallback.local)
 					if err != nil {
-						txCallback.result <- err
+						if txCallback.result != nil {
+							txCallback.result <- err
+						}
 						continue
 					}
 					txPreEvent := &TxPreEvent{}
@@ -362,11 +365,12 @@ func (pool *TxPool) loop() {
 						txCallback.result <- err
 					}
 				}
+				fmt.Println("===============pool.mu.Unlock() 22222222")
 				pool.mu.Unlock()
 			}
 			// Be unsubscribed due to system stopped
 		case err := <-pool.chainHeadSub.Err():
-			log.Error("Pool.chainHeadSub.Err()", "err", err)
+			log.Error("========Pool.chainHeadSub.Err()", "err", err)
 			return
 
 			// Handle stats reporting ticks
