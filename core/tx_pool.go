@@ -220,6 +220,7 @@ type TxPool struct {
 	all                map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced             *txPricedList                      // All transactions sorted by price
 	inCommit           bool
+	appConsumer        bool
 	cachedTxs          chan TxCallback
 	pendingTxPreEvents map[common.Hash]*TxPreEvent
 
@@ -299,7 +300,7 @@ func (pool *TxPool) loop() {
 	// Track the previous head headers for transaction reorgs
 	head := pool.chain.CurrentBlock()
 
-	if pool.scope.Count() == 0 {
+	if !pool.appConsumer {
 		for {
 			select {
 			// Handle ChainHeadEvent
@@ -312,7 +313,7 @@ func (pool *TxPool) loop() {
 				head = ev.Block
 				pool.mu.Unlock()
 			}
-			if pool.scope.Count() != 0 {	//gelchain begins to consume TxPreEvent
+			if pool.appConsumer { //gelchain begins to consume TxPreEvent
 				break
 			}
 		}
