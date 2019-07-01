@@ -333,7 +333,7 @@ func (pool *TxPool) loop() {
 					}
 					delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
 					if txCallback.result != nil {
-						if txPreEvent.Result != nil { //put into queue but not into pending
+						if txPreEvent.Result != nil { //has been put into pending
 							err = <-txPreEvent.Result
 						}
 						txCallback.result <- err
@@ -849,7 +849,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	}
 	txPreEvent.From = addr
 	txPreEvent.Tx = tx
-	txPreEvent.Result = make(chan error, 2)
+	txPreEvent.Result = make(chan error, 5)
 	pool.txFeed.Send(*txPreEvent) //leilei delete go routine call for ethermint checkTx
 }
 
