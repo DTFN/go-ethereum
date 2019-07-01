@@ -305,7 +305,9 @@ func (pool *TxPool) loop() {
 			select {
 			// Handle ChainHeadEvent
 			case ev := <-pool.chainHeadCh:
+				fmt.Println("===============loop try get lock 1111")
 				pool.mu.Lock()
+				fmt.Println("===============loop get lock 1111111")
 				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
 					pool.homestead = true
 				}
@@ -325,7 +327,9 @@ func (pool *TxPool) loop() {
 		case ev := <-pool.chainHeadCh:
 			if ev.Block != nil {
 				pool.inCommit = true
+				fmt.Println("===============loop try get lock 2222")
 				pool.mu.Lock()
+				fmt.Println("===============loop get lock 22222222")
 				pool.inCommit = false
 				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
 					pool.homestead = true
@@ -361,7 +365,8 @@ func (pool *TxPool) loop() {
 				pool.mu.Unlock()
 			}
 			// Be unsubscribed due to system stopped
-		case <-pool.chainHeadSub.Err():
+		case err := <-pool.chainHeadSub.Err():
+			log.Error("Pool.chainHeadSub.Err()", "err", err)
 			return
 
 			// Handle stats reporting ticks
@@ -919,10 +924,12 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		return err
 	}
 	pool.mu.Lock()
+	fmt.Println("===============addTx lock")
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
 	if err != nil {
 		pool.mu.Unlock()
+		fmt.Println("===============addTx Unlock  err != nil")
 		return err
 	}
 	txPreEvent := &TxPreEvent{}
@@ -935,8 +942,10 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	delete(pool.pendingTxPreEvents, tx.Hash())
 	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
+		fmt.Println("===============addTx Unlock  txPreEvent.Result == nil")
 		return nil
 	}
+	fmt.Println("===============addTx Unlock  txPreEvent.Result != nil")
 	pool.mu.Unlock()
 
 	err = <-txPreEvent.Result
