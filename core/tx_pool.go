@@ -432,6 +432,10 @@ func (pool *TxPool) CopyPendingStateToCurPos() *state.StateDB {
 	return pendingState.StateDB
 }
 
+func (pool *TxPool) BeginConsume() {
+	pool.appConsumer = true
+}
+
 // lockedReset is a wrapper around reset to allow calling it in a thread safe
 // manner. This method is only ever used in the tester!
 func (pool *TxPool) lockedReset(oldHead, newHead *types.Header) {
