@@ -336,10 +336,14 @@ func (pool *TxPool) loop() {
 				}
 				pool.reset(head.Header(), ev.Block.Header())
 				head = ev.Block
-				pool.cachedTxs <- TxCallback{nil, false, nil} //an indicator
+				pool.cachedTxs <- TxCallback{nil, true, nil} //an indicator
 				fmt.Println("===============loop put indicator into cachedTxs")
+				i := 0
 				for txCallback := range pool.cachedTxs {
+					fmt.Println(fmt.Sprintf("===========range %v", i))
+					i++
 					if txCallback.tx == nil { //receive the indicator
+						fmt.Println("===============txCallback.tx == nil, break")
 						break
 					}
 					// Try to inject the transaction and update any state
