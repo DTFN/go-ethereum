@@ -320,7 +320,7 @@ func (pool *TxPool) loop() {
 			}
 			// Be unsubscribed due to system stopped
 		case err := <-pool.chainHeadSub.Err():
-			log.Error("========Pool.chainHeadSub.Err()", "err", err)
+			log.Error("Pool.chainHeadSub.Err!", "err", err)
 			return
 
 			// Handle stats reporting ticks
@@ -925,7 +925,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		return err
 	}
 	pool.mu.Lock()
-	if pool.status == 1 {
+	if pool.status > 0 {
 		callback := make(chan error, 1)
 		pool.cachedTxs <- TxCallback{tx, local, callback}
 		pool.status = 2
@@ -973,7 +973,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		return errs
 	}
 	pool.mu.Lock()
-	if pool.status == 1 {
+	if pool.status > 0 {
 		errs := make([]error, len(txs))
 		callbacks := make([]chan error, len(txs))
 		for i, tx := range txs {
