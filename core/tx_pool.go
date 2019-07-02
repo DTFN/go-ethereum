@@ -1086,10 +1086,6 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 		pool.priced.Removed()
 	}
 
-	if txPreEvent := pool.pendingTxPreEvents[hash]; txPreEvent != nil {
-		txPreEvent.Result <- errors.New("tx has been removed")
-	}
-
 	// Remove the transaction from the pending lists and reset the account nonce
 	if pending := pool.pending[addr]; pending != nil {
 		if removed, invalids := pending.Remove(tx); removed {
@@ -1314,9 +1310,6 @@ func (pool *TxPool) demoteUnexecutables() {
 			log.Trace("Removed old pending transaction", "hash", hash)
 			delete(pool.all, hash)
 			pool.priced.Removed()
-			if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
-				txPreEvent.Result <- errors.New("greater nonce transaction found in the block")
-			}
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
 		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
