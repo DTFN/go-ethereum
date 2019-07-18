@@ -42,7 +42,7 @@ const (
 	// rmTxChanSize is the size of channel listening to RemovedTransactionEvent.
 	rmTxChanSize = 10
 
-	cachedTxSize = 100000
+	cachedTxSize = 500000
 )
 
 var (
@@ -220,6 +220,7 @@ type TxPool struct {
 	all                map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced             *txPricedList                      // All transactions sorted by price
 	status             int                                //0: normal status.  1:loop() wants to get lock. 2: before loop() gets lock, addTx() have put some txs into cacheTxs
+	initTxsCount       int
 	appConsumer        bool
 	cachedTxs          chan TxCallback
 	pendingTxPreEvents map[common.Hash]*TxPreEvent
@@ -260,6 +261,9 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 		if err := pool.journal.load(pool.AddTxToCache); err != nil { //don't call addTx because PosTable has not init yet
 			log.Warn("Failed to load transaction journal", "err", err)
+		}
+		if pool.initTxsCount > 0 {
+			pool.status = 2
 		}
 		if err := pool.journal.rotate(pool.local()); err != nil {
 			log.Warn("Failed to rotate transaction journal", "err", err)
@@ -911,8 +915,11 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 
 // AddTxToCache is called in NewTxPool
 func (pool *TxPool) AddTxToCache(tx *types.Transaction) error {
-	pool.cachedTxs <- TxCallback{tx, true, nil}
-	pool.status = 2
+	if pool.initTxsCount < cachedTxSize {
+		pool.cachedTxs <- TxCallback{tx, true, nil}
+		pool.initTxsCount++
+	}
+
 	return nil
 }
 
@@ -981,6 +988,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 			pool.cachedTxs <- TxCallback{tx, local, callback}
 			callbacks[i] = callback
 		}
+		pool.status = 2
 		pool.mu.Unlock()
 		for i, callback := range callbacks {
 			errs[i] = <-callback
