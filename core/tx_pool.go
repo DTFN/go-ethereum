@@ -224,14 +224,12 @@ type TxPool struct {
 	priced  *txPricedList                      // All transactions sorted by price
 
 	status             int //0: normal status.  1:loop() wants to get lock. 2: before loop() gets lock, addTx() have put some txs into cacheTxs
-	initTxsCount       int
+	txsCount           int //after init, reset every 1000 tx, for flow control
 	appConsumer        bool
 	cachedTxs          chan TxCallback
 	pendingTxPreEvents map[common.Hash]*TxPreEvent
 
 	flowLimit             bool
-	lastDetectTime        time.Time
-	detectInteval         time.Duration
 	mempoolSize           uint64
 	halfMempoolSize       uint64
 	maxFlowLimitSleepTime time.Duration
@@ -261,7 +259,6 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		cachedTxs:             make(chan TxCallback, cachedTxSize),
 		pendingTxPreEvents:    make(map[common.Hash]*TxPreEvent),
 		gasPrice:              new(big.Int).SetUint64(config.PriceLimit),
-		detectInteval:         10 * time.Second,
 		mempoolSize:           config.MempoolSize,
 		maxFlowLimitSleepTime: config.MaxFlowLimitSleepTime,
 	}
@@ -279,7 +276,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		if err := pool.journal.load(pool.AddTxToCache); err != nil { //don't call addTx because PosTable has not init yet
 			log.Warn("Failed to load transaction journal", "err", err)
 		}
-		if pool.initTxsCount > 0 {
+		if pool.txsCount > 0 {
 			pool.status = 2
 		}
 		if err := pool.journal.rotate(pool.local()); err != nil {
@@ -932,9 +929,9 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 
 // AddTxToCache is called in NewTxPool
 func (pool *TxPool) AddTxToCache(tx *types.Transaction) error {
-	if pool.initTxsCount < cachedTxSize {
+	if pool.txsCount < cachedTxSize {
 		pool.cachedTxs <- TxCallback{tx, true, nil}
-		pool.initTxsCount++
+		pool.txsCount++
 	}
 
 	return nil
@@ -946,26 +943,26 @@ func (pool *TxPool) flowLimitHandle() {
 		for _, list := range pool.pending {
 			pendingCount += uint64(list.Len())
 		}
-		if pendingCount > pool.mempoolSize {
+		if pendingCount >= pool.mempoolSize {
 			time.Sleep(pool.maxFlowLimitSleepTime)
 		} else if pendingCount > pool.halfMempoolSize {
 			sleepTime := float64(pendingCount-pool.halfMempoolSize) / float64(pool.halfMempoolSize) * float64(pool.maxFlowLimitSleepTime)
 			time.Sleep(time.Duration(sleepTime))
 		} else {
 			pool.flowLimit = false
-			pool.lastDetectTime = time.Now()
 		}
 	} else {
-		if time.Now().Sub(pool.lastDetectTime) > pool.detectInteval {
+		if pool.txsCount > 1000 {
 			pendingCount := uint64(0)
 			for _, list := range pool.pending {
 				pendingCount += uint64(list.Len())
 			}
 			if pendingCount > pool.halfMempoolSize {
 				pool.flowLimit = true
-			} else {
-				pool.lastDetectTime = time.Now()
 			}
+			pool.txsCount = 0
+		} else {
+			pool.txsCount++
 		}
 	}
 }
