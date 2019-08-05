@@ -144,6 +144,9 @@ type TxPoolConfig struct {
 	GlobalQueue  uint64 // Maximum number of non-executable transaction slots for all accounts
 
 	Lifetime time.Duration // Maximum amount of time non-executable transaction are queued
+
+	MempoolSize           uint64 //not zero to indicate open flow control
+	MaxFlowLimitSleepTime time.Duration
 }
 
 // DefaultTxPoolConfig contains the default configurations for the transaction
@@ -214,16 +217,24 @@ type TxPool struct {
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	journal *txJournal  // Journal of local transaction to back up to disk
 
-	pending            map[common.Address]*txList         // All currently processable transactions
-	queue              map[common.Address]*txList         // Queued but non-processable transactions
-	beats              map[common.Address]time.Time       // Last heartbeat from each known account
-	all                map[common.Hash]*types.Transaction // All transactions to allow lookups
-	priced             *txPricedList                      // All transactions sorted by price
-	status             int                                //0: normal status.  1:loop() wants to get lock. 2: before loop() gets lock, addTx() have put some txs into cacheTxs
+	pending map[common.Address]*txList         // All currently processable transactions
+	queue   map[common.Address]*txList         // Queued but non-processable transactions
+	beats   map[common.Address]time.Time       // Last heartbeat from each known account
+	all     map[common.Hash]*types.Transaction // All transactions to allow lookups
+	priced  *txPricedList                      // All transactions sorted by price
+
+	status             int //0: normal status.  1:loop() wants to get lock. 2: before loop() gets lock, addTx() have put some txs into cacheTxs
 	initTxsCount       int
 	appConsumer        bool
 	cachedTxs          chan TxCallback
 	pendingTxPreEvents map[common.Hash]*TxPreEvent
+
+	flowLimit             bool
+	lastDetectTime        time.Time
+	detectInteval         time.Duration
+	mempoolSize           uint64
+	halfMempoolSize       uint64
+	maxFlowLimitSleepTime time.Duration
 
 	wg sync.WaitGroup // for shutdown sync
 
@@ -238,23 +249,29 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-		config:             config,
-		chainconfig:        chainconfig,
-		chain:              chain,
-		signer:             types.NewEIP155Signer(chainconfig.ChainId),
-		pending:            make(map[common.Address]*txList),
-		queue:              make(map[common.Address]*txList),
-		beats:              make(map[common.Address]time.Time),
-		all:                make(map[common.Hash]*types.Transaction),
-		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
-		cachedTxs:          make(chan TxCallback, cachedTxSize),
-		pendingTxPreEvents: make(map[common.Hash]*TxPreEvent),
-		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
+		config:                config,
+		chainconfig:           chainconfig,
+		chain:                 chain,
+		signer:                types.NewEIP155Signer(chainconfig.ChainId),
+		pending:               make(map[common.Address]*txList),
+		queue:                 make(map[common.Address]*txList),
+		beats:                 make(map[common.Address]time.Time),
+		all:                   make(map[common.Hash]*types.Transaction),
+		chainHeadCh:           make(chan ChainHeadEvent, chainHeadChanSize),
+		cachedTxs:             make(chan TxCallback, cachedTxSize),
+		pendingTxPreEvents:    make(map[common.Hash]*TxPreEvent),
+		gasPrice:              new(big.Int).SetUint64(config.PriceLimit),
+		detectInteval:         10 * time.Second,
+		mempoolSize:           config.MempoolSize,
+		maxFlowLimitSleepTime: config.MaxFlowLimitSleepTime,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
 	pool.reset(nil, chain.CurrentBlock().Header())
 
+	if pool.mempoolSize > 0 {
+		pool.halfMempoolSize = pool.mempoolSize >> 1
+	}
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
@@ -923,9 +940,39 @@ func (pool *TxPool) AddTxToCache(tx *types.Transaction) error {
 	return nil
 }
 
+func (pool *TxPool) flowLimitHandle() {
+	if pool.flowLimit {
+		pendingCount := uint64(0)
+		for _, list := range pool.pending {
+			pendingCount += uint64(list.Len())
+		}
+		if pendingCount > pool.mempoolSize {
+			time.Sleep(pool.maxFlowLimitSleepTime)
+		} else if pendingCount > pool.halfMempoolSize {
+			sleepTime := float64(pendingCount-pool.halfMempoolSize) / float64(pool.halfMempoolSize) * float64(pool.maxFlowLimitSleepTime)
+			time.Sleep(time.Duration(sleepTime))
+		} else {
+			pool.flowLimit = false
+			pool.lastDetectTime = time.Now()
+		}
+	} else {
+		if time.Now().Sub(pool.lastDetectTime) > pool.detectInteval {
+			pendingCount := uint64(0)
+			for _, list := range pool.pending {
+				pendingCount += uint64(list.Len())
+			}
+			if pendingCount > pool.halfMempoolSize {
+				pool.flowLimit = true
+			} else {
+				pool.lastDetectTime = time.Now()
+			}
+		}
+	}
+}
+
 // addTx enqueues a single transaction into the pool if it is valid.
 func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
-	if pool.status == 2 {
+	if pool.status == 2 && !pool.flowLimit { //if flowLimit, we use lock to constrain sending
 		callback := make(chan error, 1)
 		pool.cachedTxs <- TxCallback{tx, local, callback}
 		err := <-callback
@@ -957,6 +1004,8 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
 		return nil
+	} else if pool.mempoolSize >= 0 {
+		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
 
@@ -966,7 +1015,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 
 // addTxs attempts to queue a batch of transactions if they are valid.
 func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
-	if pool.status == 2 {
+	if pool.status == 2 && !pool.flowLimit { //if flowLimit, we use lock to constrain sending
 		errs := make([]error, len(txs))
 		callbacks := make([]chan error, len(txs))
 		for i, tx := range txs {
@@ -1008,6 +1057,9 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		}
 		results[i] = make(chan error, 1)
 		results[i] <- errs[i]
+	}
+	if pool.mempoolSize >= 0 {
+		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
 
