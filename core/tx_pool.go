@@ -949,12 +949,12 @@ func (pool *TxPool) flowLimitHandle() {
 			time.Sleep(pool.maxFlowLimitSleepTime)
 		} else if pendingCount > pool.halfMempoolSize {
 			sleepTime := time.Duration(float64(pendingCount-pool.halfMempoolSize) / float64(pool.halfMempoolSize) * float64(pool.maxFlowLimitSleepTime))
-			//log.Info("TxPool flowLimit trigger due to mempool half full", "pendingCount", pendingCount, "sleepTime", sleepTime)
-			fmt.Println(fmt.Sprintf("TxPool flowLimit trigger due to mempool half full. pendingCount %v sleepTime %v", pendingCount, sleepTime))
+			log.Info("TxPool flowLimit trigger due to mempool half full", "pendingCount", pendingCount, "sleepTime", sleepTime)
+			fmt.Println(fmt.Sprintf("----TxPool flowLimit trigger due to mempool half full. pendingCount %v sleepTime %v", pendingCount, sleepTime))
 			time.Sleep(sleepTime)
 		} else {
-			fmt.Println(fmt.Sprintf("TxPool flowLimit off. pendingCount %v", pendingCount))
-			//log.Info("TxPool flowLimit off", "pendingCount", pendingCount)
+			fmt.Println(fmt.Sprintf("----TxPool flowLimit off. pendingCount %v", pendingCount))
+			log.Info("TxPool flowLimit off", "pendingCount", pendingCount)
 			pool.flowLimit = false
 		}
 	} else {
@@ -963,7 +963,8 @@ func (pool *TxPool) flowLimitHandle() {
 			for _, list := range pool.pending {
 				pendingCount += uint64(list.Len())
 			}
-			fmt.Println(fmt.Sprintf("TxPool flowLimit info. pendingCount %v", pendingCount))
+			fmt.Println(fmt.Sprintf("----TxPool flowLimit info. Submitted pendingCount %v", pendingCount))
+			log.Info("TxPool flowLimit info", "pendingCount", pendingCount)
 			if pendingCount > pool.halfMempoolSize {
 				pool.flowLimit = true
 			}
@@ -1008,7 +1009,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
 		return nil
-	} else if pool.mempoolSize >= 0 {
+	} else if pool.mempoolSize > 0 {
 		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
@@ -1062,7 +1063,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		results[i] = make(chan error, 1)
 		results[i] <- errs[i]
 	}
-	if pool.mempoolSize >= 0 {
+	if pool.mempoolSize > 0 {
 		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
