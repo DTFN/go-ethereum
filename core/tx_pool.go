@@ -944,11 +944,14 @@ func (pool *TxPool) flowLimitHandle() {
 			pendingCount += uint64(list.Len())
 		}
 		if pendingCount >= pool.mempoolSize {
+			log.Info("TxPool flowLimit trigger due to mempool full", "pendingCount", pendingCount, "sleepTime", pool.maxFlowLimitSleepTime)
 			time.Sleep(pool.maxFlowLimitSleepTime)
 		} else if pendingCount > pool.halfMempoolSize {
-			sleepTime := float64(pendingCount-pool.halfMempoolSize) / float64(pool.halfMempoolSize) * float64(pool.maxFlowLimitSleepTime)
-			time.Sleep(time.Duration(sleepTime))
+			sleepTime := time.Duration(float64(pendingCount-pool.halfMempoolSize) / float64(pool.halfMempoolSize) * float64(pool.maxFlowLimitSleepTime))
+			log.Info("TxPool flowLimit trigger due to mempool half full", "pendingCount", pendingCount, "sleepTime", sleepTime)
+			time.Sleep(sleepTime)
 		} else {
+			log.Info("TxPool flowLimit off", "pendingCount", pendingCount)
 			pool.flowLimit = false
 		}
 	} else {
