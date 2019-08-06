@@ -231,7 +231,7 @@ type TxPool struct {
 
 	flowLimit             bool
 	mempoolSize           uint64
-	halfMempoolSize       uint64
+	flowLimitThreshold    uint64
 	maxFlowLimitSleepTime time.Duration
 
 	wg sync.WaitGroup // for shutdown sync
@@ -267,7 +267,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	pool.reset(nil, chain.CurrentBlock().Header())
 
 	if pool.mempoolSize > 0 {
-		pool.halfMempoolSize = pool.mempoolSize >> 1
+		pool.flowLimitThreshold = pool.mempoolSize >> 3
 	}
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
@@ -947,13 +947,11 @@ func (pool *TxPool) flowLimitHandle() {
 			//log.Info("TxPool flowLimit trigger due to mempool full", "pendingCount", pendingCount, "sleepTime", pool.maxFlowLimitSleepTime)
 			fmt.Println(fmt.Sprintf("TxPool flowLimit trigger due to mempool full. pendingCount %v sleepTime %v", pendingCount, pool.maxFlowLimitSleepTime))
 			time.Sleep(pool.maxFlowLimitSleepTime)
-		} else if pendingCount > pool.halfMempoolSize {
-			sleepTime := time.Duration(float64(pendingCount-pool.halfMempoolSize) / float64(pool.halfMempoolSize) * float64(pool.maxFlowLimitSleepTime))
+		} else if pendingCount > pool.flowLimitThreshold {
+			sleepTime := time.Duration(float64(pendingCount-pool.flowLimitThreshold) / float64(pool.mempoolSize-pool.flowLimitThreshold) * float64(pool.maxFlowLimitSleepTime))
 			log.Info("TxPool flowLimit trigger due to mempool half full", "pendingCount", pendingCount, "sleepTime", sleepTime)
-			fmt.Println(fmt.Sprintf("----TxPool flowLimit trigger due to mempool half full. pendingCount %v sleepTime %v", pendingCount, sleepTime))
 			time.Sleep(sleepTime)
 		} else {
-			fmt.Println(fmt.Sprintf("----TxPool flowLimit off. pendingCount %v", pendingCount))
 			log.Info("TxPool flowLimit off", "pendingCount", pendingCount)
 			pool.flowLimit = false
 		}
@@ -963,9 +961,8 @@ func (pool *TxPool) flowLimitHandle() {
 			for _, list := range pool.pending {
 				pendingCount += uint64(list.Len())
 			}
-			fmt.Println(fmt.Sprintf("----TxPool flowLimit info. Submitted pendingCount %v", pendingCount))
 			log.Info("TxPool flowLimit info", "pendingCount", pendingCount)
-			if pendingCount > pool.halfMempoolSize {
+			if pendingCount > pool.flowLimitThreshold {
 				pool.flowLimit = true
 			}
 			pool.txsCount = 0
