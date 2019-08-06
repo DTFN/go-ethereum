@@ -267,7 +267,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	pool.reset(nil, chain.CurrentBlock().Header())
 
 	if pool.mempoolSize > 0 {
-		pool.flowLimitThreshold = pool.mempoolSize >> 3
+		pool.flowLimitThreshold = pool.mempoolSize >> 2
 	}
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
@@ -949,7 +949,7 @@ func (pool *TxPool) flowLimitHandle() {
 			time.Sleep(pool.maxFlowLimitSleepTime)
 		} else if pendingCount > pool.flowLimitThreshold {
 			sleepTime := time.Duration(float64(pendingCount-pool.flowLimitThreshold) / float64(pool.mempoolSize-pool.flowLimitThreshold) * float64(pool.maxFlowLimitSleepTime))
-			log.Info("TxPool flowLimit trigger due to mempool half full", "pendingCount", pendingCount, "sleepTime", sleepTime)
+			log.Info("TxPool flowLimit trigger due to mempool exceeds limit", "pendingCount", pendingCount, "sleepTime", sleepTime)
 			time.Sleep(sleepTime)
 		} else {
 			log.Info("TxPool flowLimit off", "pendingCount", pendingCount)
@@ -961,7 +961,7 @@ func (pool *TxPool) flowLimitHandle() {
 			for _, list := range pool.pending {
 				pendingCount += uint64(list.Len())
 			}
-			log.Info("TxPool flowLimit info", "pendingCount", pendingCount)
+			log.Debug("TxPool flowLimit info", "pendingCount", pendingCount)
 			if pendingCount > pool.flowLimitThreshold {
 				pool.flowLimit = true
 			}
