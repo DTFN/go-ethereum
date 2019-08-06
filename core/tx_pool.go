@@ -954,7 +954,7 @@ func (pool *TxPool) flowLimitHandle() {
 			time.Sleep(sleepTime)
 		} else {
 			fmt.Println(fmt.Sprintf("TxPool flowLimit off. pendingCount %v", pendingCount))
-			log.Info("TxPool flowLimit off", "pendingCount", pendingCount)
+			//log.Info("TxPool flowLimit off", "pendingCount", pendingCount)
 			pool.flowLimit = false
 		}
 	} else {
@@ -963,6 +963,7 @@ func (pool *TxPool) flowLimitHandle() {
 			for _, list := range pool.pending {
 				pendingCount += uint64(list.Len())
 			}
+			fmt.Println(fmt.Sprintf("TxPool flowLimit info. pendingCount %v", pendingCount))
 			if pendingCount > pool.halfMempoolSize {
 				pool.flowLimit = true
 			}
