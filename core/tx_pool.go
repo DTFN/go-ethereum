@@ -146,6 +146,7 @@ type TxPoolConfig struct {
 	Lifetime time.Duration // Maximum amount of time non-executable transaction are queued
 
 	MempoolSize           uint64 //not zero to indicate open flow control
+	FlowLimitThreshold    uint64
 	MaxFlowLimitSleepTime time.Duration
 }
 
@@ -164,6 +165,8 @@ var DefaultTxPoolConfig = TxPoolConfig{
 	GlobalQueue:  409600,
 
 	Lifetime: 3 * time.Hour,
+
+	MempoolSize: 0,
 }
 
 // sanitize checks the provided user configurations and changes anything that's
@@ -229,10 +232,7 @@ type TxPool struct {
 	cachedTxs          chan TxCallback
 	pendingTxPreEvents map[common.Hash]*TxPreEvent
 
-	flowLimit             bool
-	mempoolSize           uint64
-	flowLimitThreshold    uint64
-	maxFlowLimitSleepTime time.Duration
+	flowLimit bool
 
 	wg sync.WaitGroup // for shutdown sync
 
@@ -247,28 +247,24 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-		config:                config,
-		chainconfig:           chainconfig,
-		chain:                 chain,
-		signer:                types.NewEIP155Signer(chainconfig.ChainId),
-		pending:               make(map[common.Address]*txList),
-		queue:                 make(map[common.Address]*txList),
-		beats:                 make(map[common.Address]time.Time),
-		all:                   make(map[common.Hash]*types.Transaction),
-		chainHeadCh:           make(chan ChainHeadEvent, chainHeadChanSize),
-		cachedTxs:             make(chan TxCallback, cachedTxSize),
-		pendingTxPreEvents:    make(map[common.Hash]*TxPreEvent),
-		gasPrice:              new(big.Int).SetUint64(config.PriceLimit),
-		mempoolSize:           config.MempoolSize,
-		maxFlowLimitSleepTime: config.MaxFlowLimitSleepTime,
+		config:             config,
+		chainconfig:        chainconfig,
+		chain:              chain,
+		signer:             types.NewEIP155Signer(chainconfig.ChainId),
+		pending:            make(map[common.Address]*txList),
+		queue:              make(map[common.Address]*txList),
+		beats:              make(map[common.Address]time.Time),
+		all:                make(map[common.Hash]*types.Transaction),
+		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
+		cachedTxs:          make(chan TxCallback, cachedTxSize),
+		pendingTxPreEvents: make(map[common.Hash]*TxPreEvent),
+		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
+		flowLimit:          false,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
 	pool.reset(nil, chain.CurrentBlock().Header())
 
-	if pool.mempoolSize > 0 {
-		pool.flowLimitThreshold = pool.mempoolSize >> 2
-	}
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
@@ -943,12 +939,12 @@ func (pool *TxPool) flowLimitHandle() {
 		for _, list := range pool.pending {
 			pendingCount += uint64(list.Len())
 		}
-		if pendingCount >= pool.mempoolSize {
+		if pendingCount >= pool.config.MempoolSize {
 			//log.Info("TxPool flowLimit trigger due to mempool full", "pendingCount", pendingCount, "sleepTime", pool.maxFlowLimitSleepTime)
-			fmt.Println(fmt.Sprintf("TxPool flowLimit trigger due to mempool full. pendingCount %v sleepTime %v", pendingCount, pool.maxFlowLimitSleepTime))
-			time.Sleep(pool.maxFlowLimitSleepTime)
-		} else if pendingCount > pool.flowLimitThreshold {
-			sleepTime := time.Duration(float64(pendingCount-pool.flowLimitThreshold) / float64(pool.mempoolSize-pool.flowLimitThreshold) * float64(pool.maxFlowLimitSleepTime))
+			fmt.Println(fmt.Sprintf("TxPool flowLimit trigger due to mempool full. pendingCount %v sleepTime %v", pendingCount, pool.config.MaxFlowLimitSleepTime))
+			time.Sleep(pool.config.MaxFlowLimitSleepTime)
+		} else if pendingCount > pool.config.FlowLimitThreshold {
+			sleepTime := time.Duration(float64(pendingCount-pool.config.FlowLimitThreshold) / float64(pool.config.MempoolSize-pool.config.FlowLimitThreshold) * float64(pool.config.MaxFlowLimitSleepTime))
 			log.Info("TxPool flowLimit trigger due to mempool exceeds limit", "pendingCount", pendingCount, "sleepTime", sleepTime)
 			time.Sleep(sleepTime)
 		} else {
@@ -962,7 +958,7 @@ func (pool *TxPool) flowLimitHandle() {
 				pendingCount += uint64(list.Len())
 			}
 			log.Debug("TxPool flowLimit info", "pendingCount", pendingCount)
-			if pendingCount > pool.flowLimitThreshold {
+			if pendingCount > pool.config.FlowLimitThreshold {
 				pool.flowLimit = true
 			}
 			pool.txsCount = 0
@@ -1006,7 +1002,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
 		return nil
-	} else if pool.mempoolSize > 0 {
+	} else if pool.config.MempoolSize > 0 {
 		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
@@ -1060,7 +1056,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		results[i] = make(chan error, 1)
 		results[i] <- errs[i]
 	}
-	if pool.mempoolSize > 0 {
+	if pool.config.MempoolSize > 0 {
 		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
