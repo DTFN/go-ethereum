@@ -232,7 +232,8 @@ type TxPool struct {
 	cachedTxs          chan TxCallback
 	pendingTxPreEvents map[common.Hash]*TxPreEvent
 
-	flowLimit bool
+	flowLimit     bool
+	mempoolTxsLen int
 
 	wg sync.WaitGroup // for shutdown sync
 
@@ -929,42 +930,37 @@ func (pool *TxPool) AddTxToCache(tx *types.Transaction) error {
 		pool.cachedTxs <- TxCallback{tx, true, nil}
 		pool.txsCount++
 	}
-
 	return nil
 }
 
-func (pool *TxPool) flowLimitHandle() {
-	if pool.flowLimit {
-		pendingCount := uint64(0)
-		for _, list := range pool.pending {
-			pendingCount += uint64(list.Len())
-		}
-		if pendingCount >= pool.config.MempoolSize {
-			//log.Info("TxPool flowLimit trigger due to mempool full", "pendingCount", pendingCount, "sleepTime", pool.maxFlowLimitSleepTime)
-			fmt.Println(fmt.Sprintf("TxPool flowLimit trigger due to mempool full. pendingCount %v sleepTime %v", pendingCount, pool.config.MaxFlowLimitSleepTime))
-			time.Sleep(pool.config.MaxFlowLimitSleepTime)
-		} else if pendingCount > pool.config.FlowLimitThreshold {
-			sleepTime := time.Duration(float64(pendingCount-pool.config.FlowLimitThreshold) / float64(pool.config.MempoolSize-pool.config.FlowLimitThreshold) * float64(pool.config.MaxFlowLimitSleepTime))
-			log.Info("TxPool flowLimit trigger due to mempool exceeds limit", "pendingCount", pendingCount, "sleepTime", sleepTime)
-			time.Sleep(sleepTime)
-		} else {
-			log.Info("TxPool flowLimit off", "pendingCount", pendingCount)
-			pool.flowLimit = false
-		}
+func (pool *TxPool) IsFlowControlOpen() bool {
+	return pool.config.MempoolSize > 0
+}
+
+func (pool *TxPool) SetFlowLimit(txsLen int) {
+	txsLen64 := uint64(txsLen)
+	if !pool.flowLimit && txsLen64 <= pool.config.FlowLimitThreshold {
+		return
+	}
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	pool.mempoolTxsLen = txsLen
+	if txsLen64 < pool.config.FlowLimitThreshold {
+		pool.flowLimit = false
 	} else {
-		if pool.txsCount > 1000 {
-			pendingCount := uint64(0)
-			for _, list := range pool.pending {
-				pendingCount += uint64(list.Len())
-			}
-			log.Debug("TxPool flowLimit info", "pendingCount", pendingCount)
-			if pendingCount > pool.config.FlowLimitThreshold {
-				pool.flowLimit = true
-			}
-			pool.txsCount = 0
-		} else {
-			pool.txsCount++
-		}
+		pool.flowLimit = true
+	}
+}
+
+func (pool *TxPool) flowLimitHandle() {
+	mempoolTxsLen := uint64(pool.mempoolTxsLen)
+	if mempoolTxsLen >= pool.config.MempoolSize {
+		log.Info("TxPool flowLimit trigger due to mempool full", "mempoolTxsLen", mempoolTxsLen, "sleepTime", pool.config.MaxFlowLimitSleepTime)
+		time.Sleep(pool.config.MaxFlowLimitSleepTime)
+	} else if mempoolTxsLen > pool.config.FlowLimitThreshold {
+		sleepTime := time.Duration(float64(mempoolTxsLen-pool.config.FlowLimitThreshold) / float64(pool.config.MempoolSize-pool.config.FlowLimitThreshold) * float64(pool.config.MaxFlowLimitSleepTime))
+		log.Info("TxPool flowLimit trigger due to mempool exceeds limit", "mempoolTxsLen", mempoolTxsLen, "sleepTime", sleepTime)
+		time.Sleep(sleepTime)
 	}
 }
 
@@ -1002,7 +998,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
 		return nil
-	} else if pool.config.MempoolSize > 0 {
+	} else if pool.config.MempoolSize > 0 && pool.flowLimit {
 		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
@@ -1056,7 +1052,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		results[i] = make(chan error, 1)
 		results[i] <- errs[i]
 	}
-	if pool.config.MempoolSize > 0 {
+	if pool.config.MempoolSize > 0 && pool.flowLimit {
 		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
