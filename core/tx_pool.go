@@ -973,7 +973,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		return err
 	}
 	pool.mu.Lock()
-	if pool.status > 0 {
+	if pool.status > 0 && !pool.flowLimit {
 		callback := make(chan error, 1)
 		pool.cachedTxs <- TxCallback{tx, local, callback}
 		pool.status = 2
@@ -1023,7 +1023,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		return errs
 	}
 	pool.mu.Lock()
-	if pool.status > 0 {
+	if pool.status > 0 && !pool.flowLimit {
 		errs := make([]error, len(txs))
 		callbacks := make([]chan error, len(txs))
 		for i, tx := range txs {
