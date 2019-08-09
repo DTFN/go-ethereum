@@ -226,10 +226,8 @@ type TxPool struct {
 	all     map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced  *txPricedList                      // All transactions sorted by price
 
-	status             int //0: normal status.  1:loop() wants to get lock. 2: before loop() gets lock, addTx() have put some txs into cacheTxs
-	txsCount           int //after init, reset every 1000 tx, for flow control
-	appConsumer        bool
-	cachedTxs          chan TxCallback
+	blockArrive        bool //true when loop() wants to get lock
+	initTxCount        int
 	pendingTxPreEvents map[common.Hash]*TxPreEvent
 
 	flowLimit     bool
@@ -257,7 +255,6 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		beats:              make(map[common.Address]time.Time),
 		all:                make(map[common.Hash]*types.Transaction),
 		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
-		cachedTxs:          make(chan TxCallback, cachedTxSize),
 		pendingTxPreEvents: make(map[common.Hash]*TxPreEvent),
 		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
 		flowLimit:          false,
@@ -270,11 +267,8 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
 
-		if err := pool.journal.load(pool.AddTxToCache); err != nil { //don't call addTx because PosTable has not init yet
+		if err := pool.journal.load(pool.AddLocalCheck); err != nil { //don't call addTx because PosTable has not init yet
 			log.Warn("Failed to load transaction journal", "err", err)
-		}
-		if pool.txsCount > 0 {
-			pool.status = 2
 		}
 		if err := pool.journal.rotate(pool.local()); err != nil {
 			log.Warn("Failed to rotate transaction journal", "err", err)
@@ -321,11 +315,9 @@ func (pool *TxPool) loop() {
 		// Handle ChainHeadEvent
 		case ev := <-pool.chainHeadCh:
 			if ev.Block != nil {
-				pool.status = 1
+				pool.blockArrive = true
 				pool.mu.Lock()
-				if pool.status == 1 { //no tx has been put into cacheTxs
-					pool.status = 0
-				}
+				pool.blockArrive = false
 				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
 					pool.homestead = true
 				}
@@ -404,56 +396,6 @@ func (pool *TxPool) CopyPendingStateToCurPos() *state.StateDB {
 		pendingState.SetNonce(addr, txs[len(txs)-1].Nonce()+1)
 	}
 	return pendingState.StateDB
-}
-
-func (pool *TxPool) BeginConsume() {
-	pool.appConsumer = true
-}
-
-func (pool *TxPool) HandleCachedTxs() {
-	if pool.status == 0 || !pool.appConsumer {
-		return
-	} else if pool.status == 1 {
-		for {
-			time.Sleep(200 * time.Millisecond)
-			if pool.status == 0 {
-				return
-			} else if pool.status == 2 {
-				break
-			}
-		}
-	}
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	pool.status = 0
-	pool.cachedTxs <- TxCallback{nil, true, nil} //an indicator
-	for txCallback := range pool.cachedTxs {
-		if txCallback.tx == nil { //receive the indicator
-			break
-		}
-		// Try to inject the transaction and update any state
-		replace, err := pool.add(txCallback.tx, txCallback.local)
-		if err != nil {
-			if txCallback.result != nil {
-				txCallback.result <- err
-			}
-			continue
-		}
-		txPreEvent := &TxPreEvent{}
-		pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
-		// If we added a new transaction, run promotion checks and return
-		if !replace {
-			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
-			pool.promoteExecutables([]common.Address{from})
-		}
-		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-		if txCallback.result != nil {
-			if txPreEvent.Result != nil { //has been put into pending
-				err = <-txPreEvent.Result
-			}
-			txCallback.result <- err
-		}
-	}
 }
 
 // lockedReset is a wrapper around reset to allow calling it in a thread safe
@@ -925,12 +867,12 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 }
 
 // AddTxToCache is called in NewTxPool
-func (pool *TxPool) AddTxToCache(tx *types.Transaction) error {
-	if pool.txsCount < cachedTxSize {
-		pool.cachedTxs <- TxCallback{tx, true, nil}
-		pool.txsCount++
+func (pool *TxPool) AddLocalCheck(tx *types.Transaction) error {
+	if pool.initTxCount < cachedTxSize {
+		pool.initTxCount++
+		return pool.AddLocal(tx)
 	}
-	return nil
+	return fmt.Errorf("Discard tx %v for exceeding channel size", tx.Hash())
 }
 
 func (pool *TxPool) IsFlowControlOpen() bool {
@@ -942,8 +884,6 @@ func (pool *TxPool) SetFlowLimit(txsLen int) {
 	if !pool.flowLimit && txsLen64 <= pool.config.FlowLimitThreshold {
 		return
 	}
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
 	pool.mempoolTxsLen = txsLen
 	if txsLen64 < pool.config.FlowLimitThreshold {
 		pool.flowLimit = false
@@ -966,21 +906,13 @@ func (pool *TxPool) flowLimitHandle() {
 
 // addTx enqueues a single transaction into the pool if it is valid.
 func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
-	if pool.status == 2 && !pool.flowLimit { //if flowLimit, we use lock to constrain sending
-		callback := make(chan error, 1)
-		pool.cachedTxs <- TxCallback{tx, local, callback}
-		err := <-callback
-		return err
+	if pool.flowLimit {
+		pool.flowLimitHandle()
+	}
+	for i := 0; pool.blockArrive || i < 5; i++ {
+		time.Sleep(200 * time.Millisecond)
 	}
 	pool.mu.Lock()
-	if pool.status > 0 && !pool.flowLimit {
-		callback := make(chan error, 1)
-		pool.cachedTxs <- TxCallback{tx, local, callback}
-		pool.status = 2
-		pool.mu.Unlock()
-		err := <-callback
-		return err
-	}
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
 	if err != nil {
@@ -998,8 +930,6 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
 		return nil
-	} else if pool.config.MempoolSize > 0 && pool.flowLimit {
-		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
 
@@ -1009,35 +939,13 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 
 // addTxs attempts to queue a batch of transactions if they are valid.
 func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
-	if pool.status == 2 && !pool.flowLimit { //if flowLimit, we use lock to constrain sending
-		errs := make([]error, len(txs))
-		callbacks := make([]chan error, len(txs))
-		for i, tx := range txs {
-			callback := make(chan error, 1)
-			pool.cachedTxs <- TxCallback{tx, local, callback}
-			callbacks[i] = callback
-		}
-		for i, callback := range callbacks {
-			errs[i] = <-callback
-		}
-		return errs
+	if pool.flowLimit {
+		pool.flowLimitHandle()
+	}
+	for i := 0; pool.blockArrive || i < 5; i++ {
+		time.Sleep(200 * time.Millisecond)
 	}
 	pool.mu.Lock()
-	if pool.status > 0 && !pool.flowLimit {
-		errs := make([]error, len(txs))
-		callbacks := make([]chan error, len(txs))
-		for i, tx := range txs {
-			callback := make(chan error, 1)
-			pool.cachedTxs <- TxCallback{tx, local, callback}
-			callbacks[i] = callback
-		}
-		pool.status = 2
-		pool.mu.Unlock()
-		for i, callback := range callbacks {
-			errs[i] = <-callback
-		}
-		return errs
-	}
 	errs := pool.addTxsLocked(txs, local)
 	results := make([]chan error, len(txs))
 	for i, tx := range txs {
@@ -1051,9 +959,6 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		}
 		results[i] = make(chan error, 1)
 		results[i] <- errs[i]
-	}
-	if pool.config.MempoolSize > 0 && pool.flowLimit {
-		pool.flowLimitHandle()
 	}
 	pool.mu.Unlock()
 
