@@ -257,6 +257,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		beats:              make(map[common.Address]time.Time),
 		all:                make(map[common.Hash]*types.Transaction),
 		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
+		cachedTxs:          make(chan TxCallback, cachedTxSize),
 		pendingTxPreEvents: make(map[common.Hash]*TxPreEvent),
 		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
 		initTxCount:        0,
