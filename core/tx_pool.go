@@ -261,6 +261,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
 		initTxCount:        0,
 		flowLimit:          false,
+		appConsumer:        false,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
