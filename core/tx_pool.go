@@ -257,6 +257,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
 		pendingTxPreEvents: make(map[common.Hash]*TxPreEvent),
 		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
+		initTxCount:        0,
 		flowLimit:          false,
 	}
 	pool.locals = newAccountSet(pool.signer)
@@ -909,7 +910,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if pool.flowLimit {
 		pool.flowLimitHandle()
 	}
-	for i := 0; pool.blockArrive || i < 5; i++ {
+	for i := 0; pool.blockArrive && i < 5; i++ {
 		time.Sleep(200 * time.Millisecond)
 	}
 	pool.mu.Lock()
@@ -942,7 +943,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	if pool.flowLimit {
 		pool.flowLimitHandle()
 	}
-	for i := 0; pool.blockArrive || i < 5; i++ {
+	for i := 0; pool.blockArrive && i < 5; i++ {
 		time.Sleep(200 * time.Millisecond)
 	}
 	pool.mu.Lock()
