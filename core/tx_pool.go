@@ -228,9 +228,11 @@ type TxPool struct {
 
 	blockArrive        bool //true when loop() wants to get lock
 	initTxCount        int
+	appConsumer        bool
 	pendingTxPreEvents map[common.Hash]*TxPreEvent
 
 	flowLimit     bool
+	cachedTxs     chan TxCallback
 	mempoolTxsLen int
 
 	wg sync.WaitGroup // for shutdown sync
@@ -905,13 +907,76 @@ func (pool *TxPool) flowLimitHandle() {
 	}
 }
 
+func (pool *TxPool) BeginConsume() {
+	pool.appConsumer = true
+}
+
+func (pool *TxPool) HandleCachedTxs() {
+	if !pool.appConsumer { //in replay, tendermint not started yet
+		return
+	}
+	pool.cachedTxs <- TxCallback{nil, true, nil} //an indicator
+	txCallback := <-pool.cachedTxs
+	if txCallback.tx == nil { //receive the indicator
+		return
+	}
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	// Try to inject the transaction and update any state
+	replace, err := pool.add(txCallback.tx, txCallback.local)
+	if err != nil {
+		txCallback.result <- err
+	} else {
+		txPreEvent := &TxPreEvent{}
+		pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
+		// If we added a new transaction, run promotion checks and return
+		if !replace {
+			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
+			pool.promoteExecutables([]common.Address{from})
+		}
+		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
+
+		if txPreEvent.Result != nil { //has been put into pending
+			err = <-txPreEvent.Result
+		}
+		txCallback.result <- err
+	}
+
+	for txCallback := range pool.cachedTxs {
+		if txCallback.tx == nil { //receive the indicator
+			break
+		}
+		// Try to inject the transaction and update any state
+		replace, err := pool.add(txCallback.tx, txCallback.local)
+		if err != nil {
+			txCallback.result <- err
+			continue
+		}
+		txPreEvent := &TxPreEvent{}
+		pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
+		// If we added a new transaction, run promotion checks and return
+		if !replace {
+			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
+			pool.promoteExecutables([]common.Address{from})
+		}
+		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
+		if txPreEvent.Result != nil { //has been put into pending
+			err = <-txPreEvent.Result
+		}
+		txCallback.result <- err
+	}
+}
+
 // addTx enqueues a single transaction into the pool if it is valid.
 func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if pool.flowLimit {
 		pool.flowLimitHandle()
 	}
-	for i := 0; pool.blockArrive && i < 5; i++ {
-		time.Sleep(200 * time.Millisecond)
+	if pool.blockArrive {
+		callback := make(chan error, 1)
+		pool.cachedTxs <- TxCallback{tx, local, callback}
+		err := <-callback
+		return err
 	}
 	pool.mu.Lock()
 	// Try to inject the transaction and update any state
@@ -943,8 +1008,18 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	if pool.flowLimit {
 		pool.flowLimitHandle()
 	}
-	for i := 0; pool.blockArrive && i < 5; i++ {
-		time.Sleep(200 * time.Millisecond)
+	if pool.blockArrive {
+		errs := make([]error, len(txs))
+		callbacks := make([]chan error, len(txs))
+		for i, tx := range txs {
+			callback := make(chan error, 1)
+			pool.cachedTxs <- TxCallback{tx, local, callback}
+			callbacks[i] = callback
+		}
+		for i, callback := range callbacks {
+			errs[i] = <-callback
+		}
+		return errs
 	}
 	pool.mu.Lock()
 	errs := pool.addTxsLocked(txs, local)
