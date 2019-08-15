@@ -873,11 +873,23 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 	return pool.addTxs(txs, false)
 }
 
-// AddTxToCache is called in NewTxPool
+// AddLocalCheck is called in NewTxPool
 func (pool *TxPool) AddLocalCheck(tx *types.Transaction) error {
 	if pool.initTxCount < cachedTxSize {
 		pool.initTxCount++
-		return pool.AddLocal(tx)
+		pool.mu.Lock()
+		defer pool.mu.Unlock()
+		// Try to inject the transaction and update any state
+		replace, err := pool.add(tx, true)
+		if err != nil {
+			return err
+		}
+		// If we added a new transaction, run promotion checks and return
+		if !replace {
+			from, _ := types.Sender(pool.signer, tx) // already validated
+			pool.promoteExecutables([]common.Address{from})
+		}
+		return nil
 	}
 	return fmt.Errorf("Discard tx %v for exceeding channel size", tx.Hash())
 }
@@ -887,6 +899,9 @@ func (pool *TxPool) IsFlowControlOpen() bool {
 }
 
 func (pool *TxPool) SetFlowLimit(txsLen int) {
+	if pool.mempoolTxsLen <= 0 { //flow control is not open
+		return
+	}
 	txsLen64 := uint64(txsLen)
 	if !pool.flowLimit && txsLen64 <= pool.config.FlowLimitThreshold {
 		return
