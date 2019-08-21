@@ -932,6 +932,8 @@ func (pool *TxPool) handleCachedTxs() {
 	if !pool.appConsumer { //in replay, tendermint not started yet
 		return
 	}
+	pendingTxPreEvents := make([]*TxPreEvent, 0)
+	pendingTxCallbacks := make([]*TxCallback, 0)
 	pool.cachedTxs <- TxCallback{nil, true, nil} //an indicator
 	for txCallback := range pool.cachedTxs {
 		if txCallback.tx == nil { //receive the indicator
@@ -952,11 +954,22 @@ func (pool *TxPool) handleCachedTxs() {
 		}
 		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
 		if txPreEvent.Result != nil { //has been put into pending
-			err = <-txPreEvent.Result
+			pendingTxPreEvents = append(pendingTxPreEvents, txPreEvent)
+			pendingTxCallbacks = append(pendingTxCallbacks, &txCallback)
+		} else {
+			txCallback.result <- err
 		}
-		txCallback.result <- err
 	}
 	pool.hasCachedTxs = false
+	pendingCount := len(pendingTxCallbacks)
+	if pendingCount > 0 {
+		go func() { //start a go routine to avoid deadlock
+			for i := 0; i < pendingCount; i++ {
+				err := <-pendingTxPreEvents[i].Result
+				pendingTxCallbacks[i].result <- err
+			}
+		}()
+	}
 }
 
 func (pool *TxPool) HandleCachedTxs() {
@@ -969,7 +982,6 @@ func (pool *TxPool) HandleCachedTxs() {
 		return
 	}
 	pool.mu.Lock()
-	defer pool.mu.Unlock()
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(txCallback.tx, txCallback.local)
 	if err != nil {
@@ -990,6 +1002,8 @@ func (pool *TxPool) HandleCachedTxs() {
 		txCallback.result <- err
 	}
 
+	pendingTxPreEvents := make([]*TxPreEvent, 0)
+	pendingTxCallbacks := make([]*TxCallback, 0)
 	for txCallback := range pool.cachedTxs {
 		if txCallback.tx == nil { //receive the indicator
 			break
@@ -1009,11 +1023,23 @@ func (pool *TxPool) HandleCachedTxs() {
 		}
 		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
 		if txPreEvent.Result != nil { //has been put into pending
-			err = <-txPreEvent.Result
+			pendingTxPreEvents = append(pendingTxPreEvents, txPreEvent)
+			pendingTxCallbacks = append(pendingTxCallbacks, &txCallback)
+		} else {
+			txCallback.result <- err
 		}
-		txCallback.result <- err
 	}
 	pool.hasCachedTxs = false
+	pool.mu.Unlock()
+	pendingCount := len(pendingTxCallbacks)
+	if pendingCount > 0 {
+		go func() { //start a go routine to avoid deadlock
+			for i := 0; i < pendingCount; i++ {
+				err := <-pendingTxPreEvents[i].Result
+				pendingTxCallbacks[i].result <- err
+			}
+		}()
+	}
 }
 
 // addTx enqueues a single transaction into the pool if it is valid.
