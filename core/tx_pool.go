@@ -899,13 +899,10 @@ func (pool *TxPool) IsFlowControlOpen() bool {
 }
 
 func (pool *TxPool) SetFlowLimit(txsLen int) {
-	if pool.mempoolTxsLen <= 0 { //flow control is not open
+	if pool.config.MempoolSize <= 0 { //flow control is not open
 		return
 	}
 	txsLen64 := uint64(txsLen)
-	if !pool.flowLimit && txsLen64 <= pool.config.FlowLimitThreshold {
-		return
-	}
 	pool.mempoolTxsLen = txsLen
 	if txsLen64 < pool.config.FlowLimitThreshold {
 		pool.flowLimit = false
@@ -959,6 +956,7 @@ func (pool *TxPool) handleCachedTxs() {
 		}
 		txCallback.result <- err
 	}
+	pool.hasCachedTxs = false
 }
 
 func (pool *TxPool) HandleCachedTxs() {
