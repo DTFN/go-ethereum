@@ -960,7 +960,7 @@ func (pool *TxPool) handleCachedTxs() {
 }
 
 func (pool *TxPool) HandleCachedTxs() {
-	if !pool.appConsumer { //in replay, tendermint not started yet
+	if !pool.appConsumer { //in replay, tendermint not fully started yet
 		return
 	}
 	pool.cachedTxs <- TxCallback{nil, true, nil} //an indicator
@@ -1013,6 +1013,7 @@ func (pool *TxPool) HandleCachedTxs() {
 		}
 		txCallback.result <- err
 	}
+	pool.hasCachedTxs = false
 }
 
 // addTx enqueues a single transaction into the pool if it is valid.
@@ -1030,7 +1031,6 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	pool.mu.Lock()
 	if pool.hasCachedTxs {
 		pool.handleCachedTxs()
-		pool.hasCachedTxs = false
 	}
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
@@ -1078,7 +1078,6 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	pool.mu.Lock()
 	if pool.hasCachedTxs {
 		pool.handleCachedTxs()
-		pool.hasCachedTxs = false
 	}
 	errs := pool.addTxsLocked(txs, local)
 	results := make([]chan error, len(txs))
