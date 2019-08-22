@@ -982,6 +982,8 @@ func (pool *TxPool) HandleCachedTxs() {
 		return
 	}
 	pool.mu.Lock()
+	pendingTxPreEvents := make([]*TxPreEvent, 0)
+	pendingTxCallbacks := make([]*TxCallback, 0)
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(txCallback.tx, txCallback.local)
 	if err != nil {
@@ -995,15 +997,14 @@ func (pool *TxPool) HandleCachedTxs() {
 			pool.promoteExecutables([]common.Address{from})
 		}
 		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-
 		if txPreEvent.Result != nil { //has been put into pending
-			err = <-txPreEvent.Result
+			pendingTxPreEvents = append(pendingTxPreEvents, txPreEvent)
+			pendingTxCallbacks = append(pendingTxCallbacks, &txCallback)
+		} else {
+			txCallback.result <- err
 		}
-		txCallback.result <- err
 	}
 
-	pendingTxPreEvents := make([]*TxPreEvent, 0)
-	pendingTxCallbacks := make([]*TxCallback, 0)
 	for txCallback := range pool.cachedTxs {
 		if txCallback.tx == nil { //receive the indicator
 			break
