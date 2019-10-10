@@ -42,7 +42,7 @@ const (
 	// rmTxChanSize is the size of channel listening to RemovedTransactionEvent.
 	rmTxChanSize = 10
 
-	cachedTxSize = 500000
+	cachedTxSize = 50000
 )
 
 var (
