@@ -927,87 +927,18 @@ func (pool *TxPool) BeginConsume() {
 	pool.appConsumer = true
 }
 
-// call this func with lock
-func (pool *TxPool) handleCachedTxs() {
-	if !pool.appConsumer { //in replay, tendermint not started yet
-		return
-	}
-	pendingTxPreEvents := make([]*TxPreEvent, 0)
-	pendingTxCallbacks := make([]*TxCallback, 0)
-	pool.cachedTxs <- TxCallback{nil, true, nil} //an indicator
-	for txCallback := range pool.cachedTxs {
-		if txCallback.tx == nil { //receive the indicator
-			break
-		}
-		// Try to inject the transaction and update any state
-		replace, err := pool.add(txCallback.tx, txCallback.local)
-		if err != nil {
-			txCallback.result <- err
-			continue
-		}
-		txPreEvent := &TxPreEvent{}
-		pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
-		// If we added a new transaction, run promotion checks and return
-		if !replace {
-			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
-			pool.promoteExecutables([]common.Address{from})
-		}
-		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-		if txPreEvent.Result != nil { //has been put into pending
-			pendingTxPreEvents = append(pendingTxPreEvents, txPreEvent)
-			pendingTxCallbacks = append(pendingTxCallbacks, &txCallback)
-		} else {
-			txCallback.result <- err
-		}
-	}
-	pool.hasCachedTxs = false
-	pendingCount := len(pendingTxCallbacks)
-	if pendingCount > 0 {
-		go func() { //start a go routine to avoid deadlock
-			for i := 0; i < pendingCount; i++ {
-				err := <-pendingTxPreEvents[i].Result
-				pendingTxCallbacks[i].result <- err
-			}
-		}()
-	}
-}
-
 func (pool *TxPool) HandleCachedTxs() {
 	if !pool.appConsumer { //in replay, tendermint not fully started yet
 		return
 	}
-	pool.cachedTxs <- TxCallback{nil, true, nil} //an indicator
-	txCallback := <-pool.cachedTxs
-	if txCallback.tx == nil { //receive the indicator
-		return
-	}
 	pool.mu.Lock()
+	close(pool.cachedTxs)	//this func is called after app.Commit, blockArrive should be false, no routine puts tx into cachedTxs directly, so it is safe to close it
 	pendingTxPreEvents := make([]*TxPreEvent, 0)
 	pendingTxCallbacks := make([]*TxCallback, 0)
-	// Try to inject the transaction and update any state
-	replace, err := pool.add(txCallback.tx, txCallback.local)
-	if err != nil {
-		txCallback.result <- err
-	} else {
-		txPreEvent := &TxPreEvent{}
-		pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
-		// If we added a new transaction, run promotion checks and return
-		if !replace {
-			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
-			pool.promoteExecutables([]common.Address{from})
-		}
-		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-		if txPreEvent.Result != nil { //has been put into pending
-			pendingTxPreEvents = append(pendingTxPreEvents, txPreEvent)
-			pendingTxCallbacks = append(pendingTxCallbacks, &txCallback)
-		} else {
-			txCallback.result <- err
-		}
-	}
 
 	for txCallback := range pool.cachedTxs {
-		if txCallback.tx == nil { //receive the indicator
-			break
+		if txCallback.tx == nil {
+			panic("txCallback.tx cannot be nil")
 		}
 		// Try to inject the transaction and update any state
 		replace, err := pool.add(txCallback.tx, txCallback.local)
@@ -1030,6 +961,7 @@ func (pool *TxPool) HandleCachedTxs() {
 			txCallback.result <- err
 		}
 	}
+	pool.cachedTxs = make(chan TxCallback, cachedTxSize)
 	pool.hasCachedTxs = false
 	pool.mu.Unlock()
 	pendingCount := len(pendingTxCallbacks)
@@ -1057,7 +989,11 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	}
 	pool.mu.Lock()
 	if pool.hasCachedTxs {
-		pool.handleCachedTxs()
+		callback := make(chan error, 1)
+		pool.cachedTxs <- TxCallback{tx, local, callback}
+		pool.mu.Unlock()
+		err := <-callback
+		return err
 	}
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
@@ -1104,7 +1040,18 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	}
 	pool.mu.Lock()
 	if pool.hasCachedTxs {
-		pool.handleCachedTxs()
+		errs := make([]error, len(txs))
+		callbacks := make([]chan error, 0)
+		for i, tx := range txs {
+			callback := make(chan error, 1)
+			pool.cachedTxs <- TxCallback{tx, local, callback}
+			callbacks[i] = callback
+		}
+		pool.mu.Unlock()
+		for i, callback := range callbacks {
+			errs[i] = <-callback
+		}
+		return errs
 	}
 	errs := pool.addTxsLocked(txs, local)
 	results := make([]chan error, len(txs))
