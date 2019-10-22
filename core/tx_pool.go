@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 	"github.com/ethereum/go-ethereum/core/txfilter"
+	"github.com/fjl/memsize/memsizeui"
 )
 
 const (
@@ -838,10 +839,13 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]
 	if !ok {
 		txPreEvent = &TxPreEvent{}
+		txPreEvent.Result = make(chan error, 1)
+	} else if txPreEvent.Result == nil {
+		txPreEvent.Result = make(chan error, 1)
 	}
 	txPreEvent.From = addr
 	txPreEvent.Tx = tx
-	txPreEvent.Result = make(chan error, 2)
+
 	pool.txFeed.Send(*txPreEvent) //leilei delete go routine call for ethermint checkTx
 }
 
@@ -932,9 +936,7 @@ func (pool *TxPool) HandleCachedTxs() {
 		return
 	}
 	pool.mu.Lock()
-	close(pool.cachedTxs)	//this func is called after app.Commit, blockArrive should be false, no routine puts tx into cachedTxs directly, so it is safe to close it
-	pendingTxPreEvents := make([]*TxPreEvent, 0)
-	pendingTxCallbacks := make([]*TxCallback, 0)
+	close(pool.cachedTxs) //this func is called after app.Commit, blockArrive should be false, no routine puts tx into cachedTxs directly, so it is safe to close it
 
 	for txCallback := range pool.cachedTxs {
 		if txCallback.tx == nil {
@@ -947,32 +949,21 @@ func (pool *TxPool) HandleCachedTxs() {
 			continue
 		}
 		txPreEvent := &TxPreEvent{}
-		pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
 		// If we added a new transaction, run promotion checks and return
 		if !replace {
+			txPreEvent.Result = txCallback.result
+			pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
 			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
 			pool.promoteExecutables([]common.Address{from})
+			delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
 		}
-		delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
-		if txPreEvent.Result != nil { //has been put into pending
-			pendingTxPreEvents = append(pendingTxPreEvents, txPreEvent)
-			pendingTxCallbacks = append(pendingTxCallbacks, &txCallback)
-		} else {
+		if txPreEvent.Tx == nil { //has been put into pending
 			txCallback.result <- err
 		}
 	}
 	pool.cachedTxs = make(chan TxCallback, cachedTxSize)
 	pool.hasCachedTxs = false
 	pool.mu.Unlock()
-	pendingCount := len(pendingTxCallbacks)
-	if pendingCount > 0 {
-		go func() { //start a go routine to avoid deadlock
-			for i := 0; i < pendingCount; i++ {
-				err := <-pendingTxPreEvents[i].Result
-				pendingTxCallbacks[i].result <- err
-			}
-		}()
-	}
 }
 
 // addTx enqueues a single transaction into the pool if it is valid.
@@ -985,6 +976,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		pool.cachedTxs <- TxCallback{tx, local, callback}
 		pool.hasCachedTxs = true
 		err := <-callback
+		close(callback)
 		return err
 	}
 	pool.mu.Lock()
@@ -993,6 +985,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		pool.cachedTxs <- TxCallback{tx, local, callback}
 		pool.mu.Unlock()
 		err := <-callback
+		close(callback)
 		return err
 	}
 	// Try to inject the transaction and update any state
@@ -1035,6 +1028,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		pool.hasCachedTxs = true
 		for i, callback := range callbacks {
 			errs[i] = <-callback
+			close(callback)
 		}
 		return errs
 	}
@@ -1050,6 +1044,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 		pool.mu.Unlock()
 		for i, callback := range callbacks {
 			errs[i] = <-callback
+			close(callback)
 		}
 		return errs
 	}
@@ -1404,6 +1399,25 @@ func (pool *TxPool) demoteUnexecutables() {
 			delete(pool.pending, addr)
 			delete(pool.beats, addr)
 		}
+	}
+}
+
+func (pool *TxPool) DebugMeomory(h *memsizeui.Handler) {
+	h.Add("txPool", pool)
+	h.Add("pending", &pool.pending)
+	h.Add("all", &pool.all)
+	h.Add("pendingTxPreEvents", &pool.pendingTxPreEvents)
+	h.Add("priced", pool.priced)
+	h.Add("queue", &pool.queue)
+	h.Add("locals", pool.locals)
+	h.Add("currentState", pool.currentState)
+	h.Add("pendingState", pool.pendingState)
+	h.Add("beats", &pool.beats)
+	h.Add("journal", pool.journal)
+	h.Add("chain", &pool.chain)
+	h.Add("chainHeadCh", &pool.chainHeadCh)
+	if blockchain1, ok := pool.chain.(*BlockChain); ok {
+		blockchain1.DebugMeomory(h)
 	}
 }
 

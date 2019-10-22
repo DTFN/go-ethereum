@@ -43,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	"github.com/fjl/memsize/memsizeui"
 )
 
 var (
@@ -1589,4 +1590,11 @@ func (bc *BlockChain) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Su
 // SubscribeLogsEvent registers a subscription of []*types.Log.
 func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
 	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) DebugMeomory(h *memsizeui.Handler) {
+	h.Add("bodyCache", &bc.bodyCache)
+	h.Add("bodyRLPCache", &bc.bodyRLPCache)
+	h.Add("futureBlocks", &bc.futureBlocks)
+	h.Add("blockCache", &bc.blockCache)
 }
