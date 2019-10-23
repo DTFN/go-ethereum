@@ -144,7 +144,7 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	gpo.lastHead = headHash
 	gpo.lastPrice = price
 	gpo.cacheLock.Unlock()
-	return gpo.lastPrice, nil
+	return price, nil
 }
 
 type getBlockPricesResult struct {
