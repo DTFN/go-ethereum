@@ -134,7 +134,7 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	price := lastPrice
 	if len(blockPrices) > 0 {
 		sort.Sort(bigIntArray(blockPrices))
-		price = blockPrices[(len(blockPrices)-1)*gpo.percentile/100]
+		price = new(big.Int).Set(blockPrices[(len(blockPrices)-1)*gpo.percentile/100])
 	}
 	if price.Cmp(maxPrice) > 0 {
 		price = new(big.Int).Set(maxPrice)
@@ -142,9 +142,9 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	close(ch)
 	gpo.cacheLock.Lock()
 	gpo.lastHead = headHash
-	gpo.lastPrice = new(big.Int).Set(price)
+	gpo.lastPrice = price
 	gpo.cacheLock.Unlock()
-	return price, nil
+	return gpo.lastPrice, nil
 }
 
 type getBlockPricesResult struct {
