@@ -51,12 +51,12 @@ var (
 
 	ErrNoGenesis = errors.New("Genesis not found in chain")
 
-	bodyCacheLimit      = 256
-	blockCacheLimit     = 256
-	maxFutureBlocks     = 256
-	maxTimeFutureBlocks = 30
+	//bodyCacheLimit      = uint64(256)
+	//blockCacheLimit     = uint64(256)
+	//maxFutureBlocks     = uint64(256)
+	maxTimeFutureBlocks = int64(30)
 	badBlockLimit       = 10
-	triesInMemory       = 13
+	triesInMemory       = uint64(13)
 
 	// BlockChainVersion ensures that an incompatible database forces a resync from scratch.
 	BlockChainVersion = 3
@@ -142,13 +142,13 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 			LRUSize:       256,
 		}
 	}
-	bodyCacheLimit = cacheConfig.LRUSize
-	blockCacheLimit = cacheConfig.LRUSize
-	maxFutureBlocks = cacheConfig.LRUSize
-	bodyCache, _ := lru.New(bodyCacheLimit)
-	bodyRLPCache, _ := lru.New(bodyCacheLimit)
-	blockCache, _ := lru.New(blockCacheLimit)
-	futureBlocks, _ := lru.New(maxFutureBlocks)
+	//bodyCacheLimit = uint64(cacheConfig.LRUSize)
+	//blockCacheLimit = uint64(cacheConfig.LRUSize)
+	//maxFutureBlocks = uint64(cacheConfig.LRUSize)
+	bodyCache, _ := lru.New(cacheConfig.LRUSize)
+	bodyRLPCache, _ := lru.New(cacheConfig.LRUSize)
+	blockCache, _ := lru.New(cacheConfig.LRUSize)
+	futureBlocks, _ := lru.New(cacheConfig.LRUSize)
 	badBlocks, _ := lru.New(badBlockLimit)
 
 	bc := &BlockChain{
@@ -960,9 +960,9 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 				if chosen < lastWrite+triesInMemory {
 					switch {
 					case size >= 2*limit:
-						log.Warn("State memory usage too high, committing", "size", size, "limit", limit, "optimum", float64(chosen-lastWrite)/triesInMemory)
+						log.Warn("State memory usage too high, committing", "size", size, "limit", limit, "optimum", float64(chosen-lastWrite)/float64(triesInMemory))
 					case bc.gcproc >= 2*bc.cacheConfig.TrieTimeLimit:
-						log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", bc.cacheConfig.TrieTimeLimit, "optimum", float64(chosen-lastWrite)/triesInMemory)
+						log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", bc.cacheConfig.TrieTimeLimit, "optimum", float64(chosen-lastWrite)/float64(triesInMemory))
 					}
 				}
 				// If optimum or critical limits reached, write to disk
