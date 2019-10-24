@@ -146,6 +146,7 @@ type TxPoolConfig struct {
 
 	Lifetime time.Duration // Maximum amount of time non-executable transaction are queued
 
+	LRUCacheSize          int
 	MempoolSize           uint64 //not zero to indicate open flow control
 	FlowLimitThreshold    uint64
 	MaxFlowLimitSleepTime time.Duration
@@ -167,7 +168,8 @@ var DefaultTxPoolConfig = TxPoolConfig{
 
 	Lifetime: 3 * time.Hour,
 
-	MempoolSize: 0,
+	MempoolSize:  0,
+	LRUCacheSize: 256,
 }
 
 // sanitize checks the provided user configurations and changes anything that's

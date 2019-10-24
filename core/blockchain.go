@@ -50,12 +50,10 @@ var (
 	blockInsertTimer = metrics.NewRegisteredTimer("chain/inserts", nil)
 
 	ErrNoGenesis = errors.New("Genesis not found in chain")
-)
 
-const (
-	bodyCacheLimit      = 64
-	blockCacheLimit     = 64
-	maxFutureBlocks     = 64
+	bodyCacheLimit      = 256
+	blockCacheLimit     = 256
+	maxFutureBlocks     = 256
 	maxTimeFutureBlocks = 30
 	badBlockLimit       = 10
 	triesInMemory       = 13
@@ -70,6 +68,7 @@ type CacheConfig struct {
 	Disabled      bool          // Whether to disable trie write caching (archive node)
 	TrieNodeLimit int           // Memory limit (MB) at which to flush the current in-memory trie to disk
 	TrieTimeLimit time.Duration // Time limit after which to flush the current in-memory trie to disk
+	LRUSize       int           //Size of LRU Cache
 }
 
 // BlockChain represents the canonical chain given a database with a genesis
@@ -140,8 +139,12 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		cacheConfig = &CacheConfig{
 			TrieNodeLimit: 256 * 1024 * 1024,
 			TrieTimeLimit: 5 * time.Minute,
+			LRUSize:       256,
 		}
 	}
+	bodyCacheLimit = cacheConfig.LRUSize
+	blockCacheLimit = cacheConfig.LRUSize
+	maxFutureBlocks = cacheConfig.LRUSize
 	bodyCache, _ := lru.New(bodyCacheLimit)
 	bodyRLPCache, _ := lru.New(bodyCacheLimit)
 	blockCache, _ := lru.New(blockCacheLimit)

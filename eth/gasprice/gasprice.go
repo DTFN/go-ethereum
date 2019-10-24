@@ -134,7 +134,7 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	price := lastPrice
 	if len(blockPrices) > 0 {
 		sort.Sort(bigIntArray(blockPrices))
-		price = new(big.Int).Set(blockPrices[(len(blockPrices)-1)*gpo.percentile/100])
+		price = blockPrices[(len(blockPrices)-1)*gpo.percentile/100]
 	}
 	if price.Cmp(maxPrice) > 0 {
 		price = new(big.Int).Set(maxPrice)
