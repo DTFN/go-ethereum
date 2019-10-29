@@ -207,7 +207,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		vmerr error
 	)
 
-	if st.evm.BlockNumber.Int64() <= 1104560 {
+	if st.evm.BlockNumber.Int64() <= 1104900 {
 		if contractCreation {
 			vmerr := txfilter.IsBlocked(msg.From(), common.Address{}, st.state.GetBalance(msg.From()), msg.Data())
 			if vmerr == nil {
