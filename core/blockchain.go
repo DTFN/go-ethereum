@@ -43,7 +43,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
-	"github.com/fjl/memsize/memsizeui"
 )
 
 var (
@@ -297,6 +296,62 @@ func (bc *BlockChain) SetHead(head uint64) error {
 			// Rewound state missing, rolled back to before pivot, reset to genesis
 			bc.currentBlock.Store(bc.genesisBlock)
 			bc.setNextBlock(bc.genesisBlock)
+		}
+	}
+	// Rewind the fast block in a simpleton way to the target head
+	if currentFastBlock := bc.CurrentFastBlock(); currentFastBlock != nil && currentHeader.Number.Uint64() < currentFastBlock.NumberU64() {
+		bc.currentFastBlock.Store(bc.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
+	}
+	// If either blocks reached nil, reset to the genesis state
+	if currentBlock := bc.CurrentBlock(); currentBlock == nil {
+		bc.currentBlock.Store(bc.genesisBlock)
+		bc.setNextBlock(bc.genesisBlock)
+	}
+	if currentFastBlock := bc.CurrentFastBlock(); currentFastBlock == nil {
+		bc.currentFastBlock.Store(bc.genesisBlock)
+	}
+	currentBlock := bc.CurrentBlock()
+	currentFastBlock := bc.CurrentFastBlock()
+	if err := WriteHeadBlockHash(bc.db, currentBlock.Hash()); err != nil {
+		log.Crit("Failed to reset head full block", "err", err)
+	}
+	if err := WriteHeadFastBlockHash(bc.db, currentFastBlock.Hash()); err != nil {
+		log.Crit("Failed to reset head fast block", "err", err)
+	}
+	return bc.loadLastState()
+}
+
+func (bc *BlockChain) RewindTo(head uint64) error {
+	log.Warn("Rewinding blockchain", "target", head)
+
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+
+	// Rewind the header chain, deleting all block bodies until then
+	delFn := func(hash common.Hash, num uint64) {
+		DeleteBody(bc.db, hash, num)
+	}
+	bc.hc.SetHead(head, delFn)
+	currentHeader := bc.hc.CurrentHeader()
+
+	// Clear out any stale content from the caches
+	bc.bodyCache.Purge()
+	bc.bodyRLPCache.Purge()
+	bc.blockCache.Purge()
+	bc.futureBlocks.Purge()
+
+	// Rewind the block chain, ensuring we don't end up with a stateless head block
+	if currentBlock := bc.CurrentBlock(); currentBlock != nil && currentHeader.Number.Uint64() < currentBlock.NumberU64() {
+		block := bc.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64())
+		bc.currentBlock.Store(block)
+		bc.setNextBlock(block)
+	}
+	if currentBlock := bc.CurrentBlock(); currentBlock != nil {
+		if _, err := state.New(currentBlock.Root(), bc.stateCache); err != nil {
+			// Rewound state missing, rolled back to before pivot, reset to last valid state
+			bc.repair(&currentBlock)
+			bc.currentBlock.Store(currentBlock)
+			bc.setNextBlock(currentBlock)
 		}
 	}
 	// Rewind the fast block in a simpleton way to the target head
@@ -1595,9 +1650,9 @@ func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscript
 	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
 }
 
-func (bc *BlockChain) DebugMeomory(h *memsizeui.Handler) {
+/*func (bc *BlockChain) DebugMeomory(h *memsizeui.Handler) {
 	h.Add("bodyCache", &bc.bodyCache)
 	h.Add("bodyRLPCache", &bc.bodyRLPCache)
 	h.Add("futureBlocks", &bc.futureBlocks)
 	h.Add("blockCache", &bc.blockCache)
-}
+}*/
