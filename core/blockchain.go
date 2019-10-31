@@ -49,15 +49,13 @@ var (
 	blockInsertTimer = metrics.NewRegisteredTimer("chain/inserts", nil)
 
 	ErrNoGenesis = errors.New("Genesis not found in chain")
-)
 
-const (
-	bodyCacheLimit      = 256
-	blockCacheLimit     = 256
-	maxFutureBlocks     = 256
-	maxTimeFutureBlocks = 30
+	//bodyCacheLimit      = uint64(256)
+	//blockCacheLimit     = uint64(256)
+	//maxFutureBlocks     = uint64(256)
+	maxTimeFutureBlocks = int64(30)
 	badBlockLimit       = 10
-	triesInMemory       = 13
+	triesInMemory       = uint64(13)
 
 	// BlockChainVersion ensures that an incompatible database forces a resync from scratch.
 	BlockChainVersion = 3
@@ -69,6 +67,7 @@ type CacheConfig struct {
 	Disabled      bool          // Whether to disable trie write caching (archive node)
 	TrieNodeLimit int           // Memory limit (MB) at which to flush the current in-memory trie to disk
 	TrieTimeLimit time.Duration // Time limit after which to flush the current in-memory trie to disk
+	LRUSize       int           //Size of LRU Cache
 }
 
 // BlockChain represents the canonical chain given a database with a genesis
@@ -139,12 +138,16 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		cacheConfig = &CacheConfig{
 			TrieNodeLimit: 256 * 1024 * 1024,
 			TrieTimeLimit: 5 * time.Minute,
+			LRUSize:       256,
 		}
 	}
-	bodyCache, _ := lru.New(bodyCacheLimit)
-	bodyRLPCache, _ := lru.New(bodyCacheLimit)
-	blockCache, _ := lru.New(blockCacheLimit)
-	futureBlocks, _ := lru.New(maxFutureBlocks)
+	//bodyCacheLimit = uint64(cacheConfig.LRUSize)
+	//blockCacheLimit = uint64(cacheConfig.LRUSize)
+	//maxFutureBlocks = uint64(cacheConfig.LRUSize)
+	bodyCache, _ := lru.New(cacheConfig.LRUSize)
+	bodyRLPCache, _ := lru.New(cacheConfig.LRUSize)
+	blockCache, _ := lru.New(cacheConfig.LRUSize)
+	futureBlocks, _ := lru.New(cacheConfig.LRUSize)
 	badBlocks, _ := lru.New(badBlockLimit)
 
 	bc := &BlockChain{
@@ -293,6 +296,62 @@ func (bc *BlockChain) SetHead(head uint64) error {
 			// Rewound state missing, rolled back to before pivot, reset to genesis
 			bc.currentBlock.Store(bc.genesisBlock)
 			bc.setNextBlock(bc.genesisBlock)
+		}
+	}
+	// Rewind the fast block in a simpleton way to the target head
+	if currentFastBlock := bc.CurrentFastBlock(); currentFastBlock != nil && currentHeader.Number.Uint64() < currentFastBlock.NumberU64() {
+		bc.currentFastBlock.Store(bc.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64()))
+	}
+	// If either blocks reached nil, reset to the genesis state
+	if currentBlock := bc.CurrentBlock(); currentBlock == nil {
+		bc.currentBlock.Store(bc.genesisBlock)
+		bc.setNextBlock(bc.genesisBlock)
+	}
+	if currentFastBlock := bc.CurrentFastBlock(); currentFastBlock == nil {
+		bc.currentFastBlock.Store(bc.genesisBlock)
+	}
+	currentBlock := bc.CurrentBlock()
+	currentFastBlock := bc.CurrentFastBlock()
+	if err := WriteHeadBlockHash(bc.db, currentBlock.Hash()); err != nil {
+		log.Crit("Failed to reset head full block", "err", err)
+	}
+	if err := WriteHeadFastBlockHash(bc.db, currentFastBlock.Hash()); err != nil {
+		log.Crit("Failed to reset head fast block", "err", err)
+	}
+	return bc.loadLastState()
+}
+
+func (bc *BlockChain) RewindTo(head uint64) error {
+	log.Warn("Rewinding blockchain", "target", head)
+
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+
+	// Rewind the header chain, deleting all block bodies until then
+	delFn := func(hash common.Hash, num uint64) {
+		DeleteBody(bc.db, hash, num)
+	}
+	bc.hc.SetHead(head, delFn)
+	currentHeader := bc.hc.CurrentHeader()
+
+	// Clear out any stale content from the caches
+	bc.bodyCache.Purge()
+	bc.bodyRLPCache.Purge()
+	bc.blockCache.Purge()
+	bc.futureBlocks.Purge()
+
+	// Rewind the block chain, ensuring we don't end up with a stateless head block
+	if currentBlock := bc.CurrentBlock(); currentBlock != nil && currentHeader.Number.Uint64() < currentBlock.NumberU64() {
+		block := bc.GetBlock(currentHeader.Hash(), currentHeader.Number.Uint64())
+		bc.currentBlock.Store(block)
+		bc.setNextBlock(block)
+	}
+	if currentBlock := bc.CurrentBlock(); currentBlock != nil {
+		if _, err := state.New(currentBlock.Root(), bc.stateCache); err != nil {
+			// Rewound state missing, rolled back to before pivot, reset to last valid state
+			bc.repair(&currentBlock)
+			bc.currentBlock.Store(currentBlock)
+			bc.setNextBlock(currentBlock)
 		}
 	}
 	// Rewind the fast block in a simpleton way to the target head
@@ -956,9 +1015,9 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 				if chosen < lastWrite+triesInMemory {
 					switch {
 					case size >= 2*limit:
-						log.Warn("State memory usage too high, committing", "size", size, "limit", limit, "optimum", float64(chosen-lastWrite)/triesInMemory)
+						log.Warn("State memory usage too high, committing", "size", size, "limit", limit, "optimum", float64(chosen-lastWrite)/float64(triesInMemory))
 					case bc.gcproc >= 2*bc.cacheConfig.TrieTimeLimit:
-						log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", bc.cacheConfig.TrieTimeLimit, "optimum", float64(chosen-lastWrite)/triesInMemory)
+						log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", bc.cacheConfig.TrieTimeLimit, "optimum", float64(chosen-lastWrite)/float64(triesInMemory))
 					}
 				}
 				// If optimum or critical limits reached, write to disk
@@ -1590,3 +1649,10 @@ func (bc *BlockChain) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Su
 func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
 	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
 }
+
+/*func (bc *BlockChain) DebugMeomory(h *memsizeui.Handler) {
+	h.Add("bodyCache", &bc.bodyCache)
+	h.Add("bodyRLPCache", &bc.bodyRLPCache)
+	h.Add("futureBlocks", &bc.futureBlocks)
+	h.Add("blockCache", &bc.blockCache)
+}*/
