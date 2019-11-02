@@ -34,7 +34,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 	"github.com/ethereum/go-ethereum/core/txfilter"
-	"github.com/fjl/memsize/memsizeui"
 )
 
 const (
@@ -43,7 +42,7 @@ const (
 	// rmTxChanSize is the size of channel listening to RemovedTransactionEvent.
 	rmTxChanSize = 10
 
-	cachedTxSize = 50000
+	cachedTxSize = 10000
 )
 
 var (
@@ -1404,7 +1403,7 @@ func (pool *TxPool) demoteUnexecutables() {
 	}
 }
 
-func (pool *TxPool) DebugMeomory(h *memsizeui.Handler) {
+/*func (pool *TxPool) DebugMeomory(h *memsizeui.Handler) {
 	h.Add("txPool", pool)
 	h.Add("pending", &pool.pending)
 	h.Add("all", &pool.all)
@@ -1421,7 +1420,7 @@ func (pool *TxPool) DebugMeomory(h *memsizeui.Handler) {
 	if blockchain1, ok := pool.chain.(*BlockChain); ok {
 		blockchain1.DebugMeomory(h)
 	}
-}
+}*/
 
 // addressByHeartbeat is an account address tagged with its last activity timestamp.
 type addressByHeartbeat struct {
