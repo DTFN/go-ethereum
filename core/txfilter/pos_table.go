@@ -206,10 +206,6 @@ func (posTable *PosTable) CanRemovePosItem() error {
 func (posTable *PosTable) RemovePosItem(signer common.Address, height int64, slash bool) error {
 	fmt.Printf("signer %X remove at height %v", signer, height)
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
-		if len(posTable.PosItemMap) <= 4 {
-			fmt.Printf("signer %X remove height %v FAIL , len<=4!", signer, height)
-			return fmt.Errorf("cannot remove validator for consensus safety")
-		}
 		posTable.ChangedFlagThisBlock = true
 		posItem.Height = height
 		if slash {
