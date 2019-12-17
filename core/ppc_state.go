@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -12,25 +13,35 @@ import (
 	"math/big"
 )
 
-
 var (
-	bigGuy   = common.HexToAddress("0x63859f245ba7c3c407a603a6007490b217b3ec5d")
+	bigGuy         = common.HexToAddress("0x63859f245ba7c3c407a603a6007490b217b3ec5d")
+	mintGasAccount = common.HexToAddress("0x5555555555555555555555555555555555555555")
 )
 
 func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
+	// can't be replaced by AsMessageWithPPCFrom
+	// cause we want to get msg.Value
 	msg, _ := tx.AsMessageWithFrom(from)
-	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
+	mintFlag := false
+	mintGasNumber := msg.Value()
+
+	if bytes.Equal(from.Bytes(), bigGuy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
+		msg, _ = tx.AsMessageWithPPCFrom(from)
+		mintFlag = true
+	}
+
+	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber)
 	return r, msg, u, e
 }
 
-func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
+func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
 	// Apply the transaction to the current state (included in the env)
-	_, gas, failed, err := PPCApplyMessage(vmenv, msg, gp)
+	_, gas, failed, err := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -66,14 +77,14 @@ func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, auth
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) ([]byte, uint64, bool, error) {
-	return NewStateTransition(evm, msg, gp).PPCTransitionDb()
+func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int) ([]byte, uint64, bool, error) {
+	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber)
 }
 
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) PPCTransitionDb() (ret []byte, usedGas uint64, failed bool, err error) {
+func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int) (ret []byte, usedGas uint64, failed bool, err error) {
 	if err = st.preCheck(); err != nil {
 		return
 	}
@@ -145,6 +156,11 @@ func (st *StateTransition) PPCTransitionDb() (ret []byte, usedGas uint64, failed
 	}
 	st.refundGas()
 	st.state.AddBalance(bigGuy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+
+	//If mintFlag is true,mint gas to bigGuy
+	if mintFlag {
+		st.state.AddBalance(bigGuy, new(big.Int).Mul(mintGasNumber, big.NewInt(10000)))
+	}
 
 	return ret, st.gasUsed(), vmerr != nil, err
 }

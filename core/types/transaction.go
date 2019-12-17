@@ -248,6 +248,21 @@ func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
 	return msg, nil
 }
 
+func (tx *Transaction) AsMessageWithPPCFrom(from common.Address) (Message, error) {
+	msg := Message{
+		nonce:      tx.data.AccountNonce,
+		gasLimit:   tx.data.GasLimit,
+		gasPrice:   new(big.Int).Set(tx.data.Price),
+		to:         tx.data.Recipient,
+		from:       from,
+		amount:     big.NewInt(0),
+		data:       tx.data.Payload,
+		checkNonce: true,
+	}
+
+	return msg, nil
+}
+
 // WithSignature returns a new transaction with the given signature.
 // This signature needs to be in the [R || S || V] format where V is 0 or 1.
 func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, error) {
