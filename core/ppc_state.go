@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -166,5 +167,9 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 		st.state.AddBalance(bigGuy, new(big.Int).Mul(mintGasNumber, big.NewInt(10000)))
 	}
 
-	return ret, st.gasUsed(), vmerr != nil, err
+	gasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
+	fmt.Println(gasAmount)
+	Gwei := new(big.Int).Div(gasAmount, new(big.Int).Mul(big.NewInt(1000),big.NewInt(1000000)))
+
+	return ret, Gwei.Uint64(), vmerr != nil, err
 }
