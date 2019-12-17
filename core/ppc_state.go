@@ -21,8 +21,6 @@ var (
 )
 
 func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
-	// can't be replaced by AsMessageWithPPCFrom
-	// cause we want to get msg.Value
 	msg, _ := tx.AsMessageWithFrom(from)
 	mintFlag := false
 	var mintGasNumber *big.Int
