@@ -25,6 +25,10 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	mintFlag := false
 	mintGasNumber := msg.Value()
 
+	//ignore value to forbid  eth-transfer
+	if !bytes.Equal(from.Bytes(),bigGuy.Bytes()){
+		msg,_ = tx.AsMessageWithPPCFrom(from)
+	}
 	if bytes.Equal(from.Bytes(), bigGuy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 		mintFlag = true
