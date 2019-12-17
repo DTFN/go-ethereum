@@ -37,7 +37,6 @@ func (posTable *PosTable) PPCSelectItemBySeedValue(vrf []byte, length int) (comm
 	posItem := posTable.PosItemMap[signer]
 	return signer, *posItem
 
-
 	//index := int64(r.Intn(int(posTable.TotalSlots)))
 	//sumSlots := int64(0)
 	//for _, signer := range posTable.SortedSigners {
