@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"math/big"
+	"strconv"
 )
 
 var (
@@ -24,7 +25,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	// cause we want to get msg.Value
 	msg, _ := tx.AsMessageWithFrom(from)
 	mintFlag := false
-	mintGasNumber := msg.Value()
+	var mintGasNumber *big.Int
 
 	//ignore value to forbid  eth-transfer
 	if !bytes.Equal(from.Bytes(),bigGuy.Bytes()){
@@ -32,6 +33,8 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	}
 	if bytes.Equal(from.Bytes(), bigGuy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
 		msg, _ = tx.AsMessageWithPPCFrom(from)
+		mintData, _ := strconv.ParseInt(string(msg.Data()), 10, 64)
+		mintGasNumber = big.NewInt(mintData)
 		mintFlag = true
 	}
 
@@ -164,7 +167,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 
 	//If mintFlag is true,mint gas to bigGuy
 	if mintFlag {
-		st.state.AddBalance(bigGuy, new(big.Int).Mul(mintGasNumber, big.NewInt(10000)))
+		st.state.AddBalance(bigGuy,new(big.Int).Mul(mintGasNumber,big.NewInt(1000000000000000000)))
 	}
 
 	gasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
