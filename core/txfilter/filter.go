@@ -1,26 +1,27 @@
 package txfilter
 
 import (
+	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	tmTypes "github.com/tendermint/tendermint/types"
-	"strings"
-	"fmt"
 	"math/big"
-	"errors"
+	"strings"
 )
 
 var (
-	sendToLock   = common.HexToAddress("0x7777777777777777777777777777777777777777")
-	sendToUnlock = common.HexToAddress("0x8888888888888888888888888888888888888888")
+	SendToLock   = common.HexToAddress("0x7777777777777777777777777777777777777777")
+	SendToUnlock = common.HexToAddress("0x8888888888888888888888888888888888888888")
 	w            = make(map[common.Address]bool)
 
 	ErrPosTableNotCreate = errors.New("PosTable has not created yet")
 	ErrPosTableNotInit   = errors.New("PosTable has not init yet")
+	ErrIllegalBetTx      = errors.New("Err Illegal Bet Tx")
 )
 
 func init() {
-	w[sendToLock] = true
-	w[sendToUnlock] = true
+	w[SendToLock] = true
+	w[SendToUnlock] = true
 }
 
 func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
@@ -245,9 +246,9 @@ func IsBetTx(to common.Address) bool {
 }
 
 func IsLockTx(to common.Address) bool {
-	return strings.EqualFold(to.String(), sendToLock.String())
+	return strings.EqualFold(to.String(), SendToLock.String())
 }
 
 func IsUnlockTx(to common.Address) bool {
-	return strings.EqualFold(to.String(), sendToUnlock.String())
+	return strings.EqualFold(to.String(), SendToUnlock.String())
 }

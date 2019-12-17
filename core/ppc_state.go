@@ -59,6 +59,8 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		msg, _ = tx.AsMessageWithFrom(subFrom)
 		from = subFrom
 		multiBetFlag = true
+	} else if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || bytes.Equal(msg.To().Bytes(), txfilter.SendToUnlock.Bytes()) {
+		return nil, nil, 0, txfilter.ErrIllegalBetTx
 	}
 
 	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiBetFlag)
