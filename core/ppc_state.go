@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -11,43 +12,67 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
+	"reflect"
 	"strconv"
+	"unsafe"
 )
 
 var (
-	bigGuy         = common.HexToAddress("0x63859f245ba7c3c407a603a6007490b217b3ec5d")
-	mintGasAccount = common.HexToAddress("0x5555555555555555555555555555555555555555")
+	bigGuy            = common.HexToAddress("0x63859f245ba7c3c407a603a6007490b217b3ec5d")
+	mintGasAccount    = common.HexToAddress("0x5555555555555555555555555555555555555555")
+	multiBetTxAccount = common.HexToAddress("0x6666666666666666666666666666666666666666")
 )
 
 func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
 	msg, _ := tx.AsMessageWithFrom(from)
 	mintFlag := false
+	multiBetFlag := false
 	var mintGasNumber *big.Int
 
 	//ignore value to forbid  eth-transfer
-	if !bytes.Equal(from.Bytes(),bigGuy.Bytes()){
-		msg,_ = tx.AsMessageWithPPCFrom(from)
-	}
-	if bytes.Equal(from.Bytes(), bigGuy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
+	if !bytes.Equal(from.Bytes(), bigGuy.Bytes()) {
+		msg, _ = tx.AsMessageWithPPCFrom(from)
+	} else if bytes.Equal(from.Bytes(), bigGuy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 		mintData, _ := strconv.ParseInt(string(msg.Data()), 10, 64)
 		mintGasNumber = big.NewInt(mintData)
 		mintFlag = true
+	} else if bytes.Equal(from.Bytes(), bigGuy.Bytes()) && bytes.Equal(msg.To().Bytes(), multiBetTxAccount.Bytes()) {
+		encodedStr := BytesToString(msg.Data())
+		testBytes, _ := hex.DecodeString(encodedStr)
+
+		tx, _ = ppcDecodeTx(testBytes)
+
+		var signer types.Signer = types.HomesteadSigner{}
+		if tx.Protected() {
+			signer = types.NewEIP155Signer(tx.ChainId())
+		}
+		var err error
+		// Make sure the transaction is signed properly
+		subFrom, err := types.Sender(signer, tx)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+
+		msg, _ = tx.AsMessageWithFrom(subFrom)
+		from = subFrom
+		multiBetFlag = true
 	}
 
-	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber)
+	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiBetFlag)
 	return r, msg, u, e
 }
 
-func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int) (*types.Receipt, uint64, error) {
+func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiBetFlag bool) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
 	// Apply the transaction to the current state (included in the env)
-	_, gas, failed, err := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber)
+	_, gas, failed, err := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiBetFlag)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -83,16 +108,22 @@ func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, auth
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int) ([]byte, uint64, bool, error) {
-	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber)
+func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiBetFlag bool) ([]byte, uint64, bool, error) {
+	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber, multiBetFlag)
 }
 
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int) (ret []byte, usedGas uint64, failed bool, err error) {
-	if err = st.preCheck(); err != nil {
-		return
+func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiBetFlag bool) (ret []byte, usedGas uint64, failed bool, err error) {
+	if multiBetFlag {
+		if err = st.ppcPreCheck(); err != nil {
+			return
+		}
+	} else {
+		if err = st.preCheck(); err != nil {
+			return
+		}
 	}
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
@@ -123,10 +154,19 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 			} else {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+				//wenbin add,support multi-tx nonce
+				if multiBetFlag {
+					st.state.SetNonce(bigGuy, st.state.GetNonce(bigGuy)+1)
+				}
 			}
 		} else {
 			// Increment the nonce for the next transaction
 			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			//wenbin add,support multi-tx nonce
+			if multiBetFlag {
+				st.state.SetNonce(bigGuy, st.state.GetNonce(bigGuy)+1)
+			}
+
 			isBetTx, vmerr := txfilter.DoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil && !isBetTx {
 				ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
@@ -139,10 +179,21 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 			} else {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+
+				//wenbin add,support multi-tx nonce
+				if multiBetFlag {
+					st.state.SetNonce(bigGuy, st.state.GetNonce(bigGuy)+1)
+				}
 			}
 		} else {
 			// Increment the nonce for the next transaction
 			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+
+			//wenbin add,support multi-tx nonce
+			if multiBetFlag {
+				st.state.SetNonce(bigGuy, st.state.GetNonce(bigGuy)+1)
+			}
+
 			isBetTx := false
 			isBetTx, vmerr = txfilter.DoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil && !isBetTx {
@@ -160,17 +211,85 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			return nil, 0, false, vmerr
 		}
 	}
-	st.refundGas()
+	if multiBetFlag {
+		st.ppcRefundGas()
+	} else {
+		st.refundGas()
+	}
+
 	st.state.AddBalance(bigGuy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
 	//If mintFlag is true,mint gas to bigGuy
 	if mintFlag {
-		st.state.AddBalance(bigGuy,new(big.Int).Mul(mintGasNumber,big.NewInt(1000000000000000000)))
+		st.state.AddBalance(bigGuy, new(big.Int).Mul(mintGasNumber, big.NewInt(1000000000000000000)))
 	}
 
 	gasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
 	fmt.Println(gasAmount)
-	Gwei := new(big.Int).Div(gasAmount, new(big.Int).Mul(big.NewInt(1000),big.NewInt(1000000)))
+	Gwei := new(big.Int).Div(gasAmount, new(big.Int).Mul(big.NewInt(1000), big.NewInt(1000000)))
 
 	return ret, Gwei.Uint64(), vmerr != nil, err
+}
+
+
+
+func (st *StateTransition) ppcPreCheck() error {
+	// Make sure this transaction's nonce is correct.
+	if st.msg.CheckNonce() {
+		nonce := st.state.GetNonce(st.msg.From())
+		if nonce < st.msg.Nonce() {
+			return ErrNonceTooHigh
+		} else if nonce > st.msg.Nonce() {
+			return ErrNonceTooLow
+		}
+	}
+	return st.ppcBuyGas()
+}
+
+func (st *StateTransition) ppcBuyGas() error {
+	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
+	if st.state.GetBalance(st.msg.From()).Cmp(mgval) < 0 {
+		return errInsufficientBalanceForGas
+	}
+	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
+		return err
+	}
+	st.gas += st.msg.Gas()
+
+	st.initialGas = st.msg.Gas()
+	st.state.SubBalance(bigGuy, mgval)
+	return nil
+}
+
+func (st *StateTransition) ppcRefundGas() {
+	// Apply refund counter, capped to half of the used gas.
+	refund := st.gasUsed() / 2
+	if refund > st.state.GetRefund() {
+		refund = st.state.GetRefund()
+	}
+	st.gas += refund
+
+	// Return ETH for remaining gas, exchanged at the original rate.
+	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)
+	st.state.AddBalance(bigGuy, remaining)
+
+	// Also return remaining gas to the block gas counter so it is
+	// available for the next transaction.
+	st.gp.AddGas(st.gas)
+}
+
+// rlp decode an etherum transaction
+func ppcDecodeTx(txBytes []byte) (*types.Transaction, error) {
+	tx := new(types.Transaction)
+	rlpStream := rlp.NewStream(bytes.NewBuffer(txBytes), 0)
+	if err := tx.DecodeRLP(rlpStream); err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+func BytesToString(b []byte) string {
+	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	sh := reflect.StringHeader{bh.Data, bh.Len}
+	return *(*string)(unsafe.Pointer(&sh))
 }
