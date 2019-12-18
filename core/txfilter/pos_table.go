@@ -172,9 +172,6 @@ func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) erro
 	fmt.Printf("signer %X upsert pi %v", signer, pi)
 	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
-		if pi.Slots <= existedItem.Slots { //we should have judged this before call this func, so panic here
-			panic(fmt.Sprintf("locked signer %v balance decreased", signer))
-		}
 		posTable.PosItemMap[signer] = pi
 		posTable.SortedPosItems.update(pi, posTable.PosItemIndexMap[signer].index)
 		posTable.TotalSlots += pi.Slots - existedItem.Slots
