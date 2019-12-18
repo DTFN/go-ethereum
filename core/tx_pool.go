@@ -27,7 +27,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/txfilter"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
@@ -646,10 +645,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if to == nil {
 		to = &common.Address{}
 	}
-	err = txfilter.IsBlocked(from, *to, pool.currentState.GetBalance(from), tx.Data())
-	if err != nil {
-		return err
-	}
+	//ignore this function, for PPC upgrade version = 4
+	//err = txfilter.IsBlocked(from, *to, pool.currentState.GetBalance(from), tx.Data())
+	//if err != nil {
+	//	return err
+	//}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
 	if !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
