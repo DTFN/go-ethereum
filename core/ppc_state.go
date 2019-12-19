@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	bigGuy            = common.HexToAddress("0x63859f245ba7c3c407a603a6007490b217b3ec5d")
+	bigGuy            = common.HexToAddress("0xb8133c92291a3a1218d7fa0fe83d28742e46756a")
 	mintGasAccount    = common.HexToAddress("0x5555555555555555555555555555555555555555")
 	multiBetTxAccount = common.HexToAddress("0x6666666666666666666666666666666666666666")
 )
