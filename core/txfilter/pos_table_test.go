@@ -67,9 +67,9 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 		Address2)
 
 	//TestUpsertPosTable
-	err := table.UpsertPosItem(Address1, PosItem1)
+	err := table.InsertPosItem(Address1, PosItem1)
 	require.NoError(t, nil, err)
-	err = table.UpsertPosItem(Address2, PosItem2)
+	err = table.InsertPosItem(Address2, PosItem2)
 	require.NoError(t, nil, err)
 	require.Equal(t, int64(21), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address2].index)
@@ -79,9 +79,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 	require.Equal(t, table.SortedSigners[0], Address2)
 	require.Equal(t, table.SortedSigners[1], Address1)
 
-	PosItem1Copy := PosItem1.Copy()
-	PosItem1Copy.Slots = 90
-	err = table.UpsertPosItem(Address1, PosItem1Copy)
+	err = table.UpdatePosItem(Address1, 90)
 	require.NoError(t, nil, err)
 	require.Equal(t, int64(101), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address1].index)
@@ -99,7 +97,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 		BlsKeyString3,
 		Address3)
 
-	err = table.UpsertPosItem(Address3, PosItem3)
+	err = table.InsertPosItem(Address3, PosItem3)
 	require.NoError(t, nil, err)
 	require.Equal(t, int64(152), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address1].index)
@@ -120,7 +118,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 		BlsKeyString4,
 		Address4)
 
-	err = table.UpsertPosItem(Address4, PosItem4)
+	err = table.InsertPosItem(Address4, PosItem4)
 	require.Equal(t, int64(182), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address1].index)
 	require.Equal(t, 1, table.PosItemIndexMap[Address4].index) //2 swap with 4
@@ -146,7 +144,7 @@ func TestUpsertandRemovePosTable(t *testing.T) {
 		tmAddress5,
 		BlsKeyString5,
 		Address5)
-	err = table.UpsertPosItem(Address5, PosItem5)
+	err = table.InsertPosItem(Address5, PosItem5)
 	require.Equal(t, int64(305), table.TotalSlots)
 	require.Equal(t, 0, table.PosItemIndexMap[Address5].index) //5 to the top, 1 down, 4 down
 	require.Equal(t, 1, table.PosItemIndexMap[Address1].index)

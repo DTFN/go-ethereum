@@ -173,8 +173,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 			if !exist {
 				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
 			}
-			posItem.Slots = currentSlots
-			EthPosTable.UpsertPosItem(from, posItem)
+			EthPosTable.UpdatePosItem(from, currentSlots)
 			return true, nil
 		} else {
 			return false, fmt.Errorf("signer %X bonded at height %d ", from, posItem.Height)
@@ -228,7 +227,7 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
-				return true, EthPosTable.UpsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
+				return true, EthPosTable.InsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
 			}
 		}
 	}
