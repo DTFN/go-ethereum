@@ -5,14 +5,15 @@ import (
 	abciTypes "github.com/tendermint/tendermint/abci/types"
 )
 
-type TxData struct {
+type PPCTxData struct {
 	PubKey       abciTypes.PubKey `json:"pub_key"`
 	Beneficiary  string           `json:"beneficiary"`
 	BlsKeyString string           `json:"bls_key_string"`
 }
 
-func UnMarshalTxData(jsonByte []byte) (*TxData, error) {
-	d := &TxData{}
+func PPCUnMarshalTxData(jsonByte []byte) (*PPCTxData, error) {
+	d := &PPCTxData{}
 	err := json.Unmarshal(jsonByte, d)
 	return d, err
 }
+
