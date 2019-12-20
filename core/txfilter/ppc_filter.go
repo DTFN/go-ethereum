@@ -24,9 +24,10 @@ func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte)
 			//wenbin add, ignore balance judge
 			//tmpInt := big.NewInt(0)
 			//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
-			//if posItem.Slots >= currentSlots {
-			//	return fmt.Errorf("signer %X already bonded at height %d ,balance has not increased", from, posItem.Height)
-			//}
+			currentSlots := int64(10)
+			if posItem.Slots >= currentSlots {
+				return fmt.Errorf("signer %X already bonded at height %d ,balance has not increased", from, posItem.Height)
+			}
 
 			txData, err := UnMarshalTxData(txDataBytes)
 			if err != nil {
@@ -73,10 +74,11 @@ func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte)
 				//wenbin add, ignore balance judge
 				//tmpInt := big.NewInt(0)
 				//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
-				//if 1 > currentSlots {
-				//	fmt.Printf("signer %X doesn't have one slot of money", from)
-				//	return fmt.Errorf("signer %X doesn't have one slot of money", from)
-				//}
+				currentSlots := int64(10)
+				if 1 > currentSlots {
+					fmt.Printf("signer %X doesn't have one slot of money", from)
+					return fmt.Errorf("signer %X doesn't have one slot of money", from)
+				}
 
 				txData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
@@ -129,12 +131,13 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 			return true, EthPosTable.RemovePosItem(from, height, false)
 		} else if IsLockTx(to) { //relock
 			//wenbin add, ignore balance judge
-			tmpInt := big.NewInt(0)
-			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
-			//if posItem.Slots >= currentSlots {
-			//	fmt.Printf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
-			//	return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
-			//}
+			//tmpInt := big.NewInt(0)
+			//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+			currentSlots := int64(10)
+			if posItem.Slots >= currentSlots {
+				fmt.Printf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
+				return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
+			}
 
 			txData, err := UnMarshalTxData(txDataBytes)
 			if err != nil {
@@ -211,13 +214,14 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
 
-				tmpInt := big.NewInt(0)
-				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 				//wenbin add, ignore balance judge
-				//if 1 > currentSlots {
-				//	fmt.Printf("signer %X doesn't have one slot of money", from)
-				//	return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
-				//}
+				//tmpInt := big.NewInt(0)
+				//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+				currentSlots := int64(10)
+				if 1 > currentSlots {
+					fmt.Printf("signer %X doesn't have one slot of money", from)
+					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
+				}
 				return true, EthPosTable.UpsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
 			}
 		}
