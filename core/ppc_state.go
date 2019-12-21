@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	bigGuy            = common.HexToAddress("0xb3d49259b486d04505b0b652ade74849c0b703c3")
+	Bigguy            = common.HexToAddress("0xb3d49259b486d04505b0b652ade74849c0b703c3")
 	mintGasAccount    = common.HexToAddress("0x5555555555555555555555555555555555555555")
 	multiBetTxAccount = common.HexToAddress("0x6666666666666666666666666666666666666666")
 )
@@ -32,14 +32,14 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	var mintGasNumber *big.Int
 
 	//ignore value to forbid  eth-transfer
-	if !bytes.Equal(from.Bytes(), bigGuy.Bytes()) {
+	if !bytes.Equal(from.Bytes(), Bigguy.Bytes()) {
 		msg, _ = tx.AsMessageWithPPCFrom(from)
-	} else if bytes.Equal(from.Bytes(), bigGuy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
+	} else if bytes.Equal(from.Bytes(), Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 		mintData, _ := strconv.ParseInt(string(msg.Data()), 10, 64)
 		mintGasNumber = big.NewInt(mintData)
 		mintFlag = true
-	} else if bytes.Equal(from.Bytes(), bigGuy.Bytes()) && bytes.Equal(msg.To().Bytes(), multiBetTxAccount.Bytes()) {
+	} else if bytes.Equal(from.Bytes(), Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), multiBetTxAccount.Bytes()) {
 		encodedStr := BytesToString(msg.Data())
 		testBytes, _ := hex.DecodeString(encodedStr)
 
@@ -158,7 +158,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 				//wenbin add,support multi-tx nonce
 				if multiBetFlag {
-					st.state.SetNonce(bigGuy, st.state.GetNonce(bigGuy)+1)
+					st.state.SetNonce(Bigguy, st.state.GetNonce(Bigguy)+1)
 				}
 			}
 		} else {
@@ -166,7 +166,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			//wenbin add,support multi-tx nonce
 			if multiBetFlag {
-				st.state.SetNonce(bigGuy, st.state.GetNonce(bigGuy)+1)
+				st.state.SetNonce(Bigguy, st.state.GetNonce(Bigguy)+1)
 			}
 
 			isBetTx, vmerr := txfilter.PPCDoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
@@ -184,7 +184,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 
 				//wenbin add,support multi-tx nonce
 				if multiBetFlag {
-					st.state.SetNonce(bigGuy, st.state.GetNonce(bigGuy)+1)
+					st.state.SetNonce(Bigguy, st.state.GetNonce(Bigguy)+1)
 				}
 			}
 		} else {
@@ -193,7 +193,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 
 			//wenbin add,support multi-tx nonce
 			if multiBetFlag {
-				st.state.SetNonce(bigGuy, st.state.GetNonce(bigGuy)+1)
+				st.state.SetNonce(Bigguy, st.state.GetNonce(Bigguy)+1)
 			}
 
 			isBetTx := false
@@ -219,11 +219,11 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 		st.refundGas()
 	}
 
-	st.state.AddBalance(bigGuy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	st.state.AddBalance(Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
-	//If mintFlag is true,mint gas to bigGuy
+	//If mintFlag is true,mint gas to Bigguy
 	if mintFlag {
-		st.state.AddBalance(bigGuy, new(big.Int).Mul(mintGasNumber, big.NewInt(1000000000000000000)))
+		st.state.AddBalance(Bigguy, new(big.Int).Mul(mintGasNumber, big.NewInt(1000000000000000000)))
 	}
 
 	gasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
@@ -257,7 +257,7 @@ func (st *StateTransition) ppcBuyGas() error {
 	st.gas += st.msg.Gas()
 
 	st.initialGas = st.msg.Gas()
-	st.state.SubBalance(bigGuy, mgval)
+	st.state.SubBalance(Bigguy, mgval)
 	return nil
 }
 
@@ -271,7 +271,7 @@ func (st *StateTransition) ppcRefundGas() {
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)
-	st.state.AddBalance(bigGuy, remaining)
+	st.state.AddBalance(Bigguy, remaining)
 
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.
