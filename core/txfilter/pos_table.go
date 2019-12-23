@@ -168,17 +168,30 @@ func (posTable *PosTable) InitStruct() {
 	posTable.InitFlag = true
 }
 
-func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) error {
-	fmt.Printf("signer %X upsert pi %v", signer, pi)
+func (posTable *PosTable) UpdatePosItem(signer common.Address, newSlots int64) error {
+	fmt.Printf("signer %X update slot to %v", signer, newSlots)
 	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
-		if pi.Slots <= existedItem.Slots { //we should have judged this before call this func, so panic here
-			panic(fmt.Sprintf("locked signer %v balance decreased", signer))
+		oldSlots := existedItem.Slots
+		if newSlots <= oldSlots {
+			panic(fmt.Sprintf("UpdatePosItem, signer %X slots not increase. oldSlots %v newSlots %v", signer, oldSlots, newSlots))
 		}
-		posTable.PosItemMap[signer] = pi
-		posTable.SortedPosItems.update(pi, posTable.PosItemIndexMap[signer].index)
-		posTable.TotalSlots += pi.Slots - existedItem.Slots
+		existedItem.Slots = newSlots
+		posTable.SortedPosItems.update(existedItem, posTable.PosItemIndexMap[signer].index)
+		posTable.TotalSlots += existedItem.Slots - oldSlots
 		return nil
+	} else {
+		panic(fmt.Sprintf("UpdatePosItem, signer %X does not exist", signer))
+	}
+	fmt.Printf("signer %X update slot %v SUCCESS", signer, newSlots)
+	return nil
+}
+
+func (posTable *PosTable) InsertPosItem(signer common.Address, pi *PosItem) error {
+	fmt.Printf("signer %X insert pi %v", signer, pi)
+	posTable.ChangedFlagThisBlock = true
+	if _, ok := posTable.PosItemMap[signer]; ok {
+		panic(fmt.Sprintf("InsertPosItem, signer %X already exist"))
 	}
 	posTable.PosItemMap[signer] = pi
 	posItemWithSigner := PosItemWithSigner{
@@ -192,7 +205,7 @@ func (posTable *PosTable) UpsertPosItem(signer common.Address, pi *PosItem) erro
 
 	posTable.TmAddressToSignerMap[pi.TmAddress] = signer
 	posTable.BlsKeyStringToSignerMap[pi.BlsKeyString] = signer
-	fmt.Printf("signer %X upsert pi %v SUCCESS", signer, pi)
+	fmt.Printf("signer %X insert pi %v SUCCESS", signer, pi)
 	return nil
 }
 

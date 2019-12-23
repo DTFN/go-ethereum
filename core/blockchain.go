@@ -965,7 +965,7 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	if ptd == nil {
 		return NonStatTy, consensus.ErrUnknownAncestor
 	}
-	// Make sure no inconsistent state is leaked during insertion
+	// Make sure no inconsistent state ist leaked during insertion
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 
