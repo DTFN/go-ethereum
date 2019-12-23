@@ -2,6 +2,8 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -21,9 +23,8 @@ import (
 var (
 	Bigguy                       = common.HexToAddress("0xb3d49259b486d04505b0b652ade74849c0b703c3")
 	mintGasAccount               = common.HexToAddress("0x5555555555555555555555555555555555555555")
-	multiBetTxAccount            = common.HexToAddress("0x6666666666666666666666666666666666666666")
 	SpecifyHeightPosTableAccount = common.HexToAddress("0x1111111111111111111111111111111111111111")
-	PPCCATable                   = common.HexToAddress("0x2222222222222222222222222222222222222222")
+	PPCCATableAccount            = common.HexToAddress("0x2222222222222222222222222222222222222222")
 	RelayAccount                 = common.HexToAddress("0x3333333333333333333333333333333333333333")
 )
 
@@ -34,10 +35,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	var mintGasNumber *big.Int
 	var relayerAccount common.Address
 
-	fmt.Println("-----------------------save SpecifyHeightPosTableAccount data----------------------")
-	ppcTableBytes := statedb.GetCode(PPCCATable)
-	fmt.Println(string(ppcTableBytes))
-	fmt.Println("-----------------------save SpecifyHeightPosTableAccount data--------------------")
+	ppcCATable := txfilter.NewPPCCATable()
 
 	//ignore value to forbid  eth-transfer
 	if !bytes.Equal(from.Bytes(), Bigguy.Bytes()) {
@@ -68,44 +66,80 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		mintData, _ := strconv.ParseInt(string(msg.Data()), 10, 64)
 		mintGasNumber = big.NewInt(mintData)
 		mintFlag = true
-	} else if bytes.Equal(from.Bytes(), Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), multiBetTxAccount.Bytes()) {
-		//encodedStr := BytesToString(msg.Data())
-		//testBytes, _ := hex.DecodeString(encodedStr)
-		//
-		//
-		//tx, _ = ppcDecodeTx(testBytes)
-		//
-		//var signer types.Signer = types.HomesteadSigner{}
-		//if tx.Protected() {
-		//	signer = types.NewEIP155Signer(tx.ChainId())
-		//}
-		//var err error
-		//// Make sure the transaction is signed properly
-		//subFrom, err := types.Sender(signer, tx)
-		//if err != nil {
-		//	return nil, nil, 0, err
-		//}
-		//
-		//msg, _ = tx.AsMessageWithFrom(subFrom)
-		//from = subFrom
-		//multiRelayerFlag = true
-	} else if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || bytes.Equal(msg.To().Bytes(), txfilter.SendToUnlock.Bytes()) {
-		return nil, nil, 0, txfilter.ErrIllegalBetTx
-	}
+	} else if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
+		//Init ppcCaTable
+		msg, _ = tx.AsMessageWithPPCFrom(from)
+		ppcTableBytes := statedb.GetCode(PPCCATableAccount)
+		json.Unmarshal(ppcTableBytes, &ppcCATable)
+		statedb.SetCode(PPCCATableAccount, ppcTableBytes)
+		value, isExisted := ppcCATable.PPCCATableItemMap[msg.From()]
+		if isExisted {
+			if !value.Used && (header.Number.Uint64() >= value.StartHeight) &&
+				(header.Number.Uint64() <= value.EndHeight) {
+				//approved bet tx,go ahead
+			} else {
+				return nil, nil, 0, errors.New("illeagal tx")
+			}
+		} else {
+			return nil, nil, 0, errors.New("illeagal tx")
+		}
+	} else if bytes.Equal(msg.From().Bytes(), Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), PPCCATableAccount.Bytes()) {
+		//Init ppcCaTable
+		msg, _ = tx.AsMessageWithPPCFrom(from)
+		ppcTableBytes := statedb.GetCode(PPCCATableAccount)
+		json.Unmarshal(ppcTableBytes, &ppcCATable)
+		statedb.SetCode(PPCCATableAccount, ppcTableBytes)
+		//manage PPCCATable by bigguy
+		ppcTxData, err := txfilter.PPCUnMarshalTxData(msg.Data())
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		fmt.Println(ppcTxData.EndBlockHeight)
+		switch ppcTxData.OperationType {
+		case "update":
+			{
+				ppcCATable.ChangedFlagThisBlock = true
+				ppcCATableItem := ppcCATable.PPCCATableItemMap[ppcTxData.OperationAddress]
+				ppcCATableItem.Used = false
+				ppcCATableItem.ApprovedTxData = ppcTxData.ApprovedTxData
+				ppcCATableItem.StartHeight = ppcTxData.StartBlockHeight
+				ppcCATableItem.EndHeight = ppcTxData.EndBlockHeight
+			}
+		case "remove":
+			{
+				ppcCATable.ChangedFlagThisBlock = true
+				delete(ppcCATable.PPCCATableItemMap, ppcTxData.OperationAddress)
+			}
+		case "kickout":
+			{
+				//directly remove user in pos_table by bigguy
+				ppcCATable.ChangedFlagThisBlock = true
+				delete(ppcCATable.PPCCATableItemMap, ppcTxData.OperationAddress)
+				msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.OperationAddress, txfilter.SendToUnlock)
+			}
+		}
 
-	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount)
+	}
+	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable)
+
+	//persist ppcCaTable
+	if ppcCATable.ChangedFlagThisBlock {
+		curBytes, _ := json.Marshal(ppcCATable)
+		fmt.Println(string(curBytes))
+		statedb.SetCode(PPCCATableAccount, curBytes)
+	}
 
 	return r, msg, u, e
 }
 
-func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address) (*types.Receipt, uint64, error) {
+func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, ppcCATable *txfilter.PPCCATable) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
 	// Apply the transaction to the current state (included in the env)
-	_, gas, failed, err := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount)
+	_, gas, failed, err, doFilterFlag := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -131,6 +165,15 @@ func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, auth
 	receipt.Logs = statedb.GetLogs(tx.Hash())
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
+	if doFilterFlag {
+		ppcCATable.ChangedFlagThisBlock = true
+		ppcCATable.SuccessBetTxHash = append(ppcCATable.SuccessBetTxHash, tx.Hash())
+		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
+			ppcCATableItem := ppcCATable.PPCCATableItemMap[msg.From()]
+			ppcCATableItem.Used = true
+		}
+	}
+
 	return receipt, gas, err
 }
 
@@ -141,14 +184,15 @@ func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, auth
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address) ([]byte, uint64, bool, error) {
+func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address) ([]byte, uint64, bool, error, bool) {
 	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount)
 }
 
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address) (ret []byte, usedGas uint64, failed bool, err error) {
+func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address) (ret []byte, usedGas uint64, failed bool, err error, DofilterFlag bool) {
+	dofilterFlag := false
 	if multiRelayerFlag {
 		if err = st.ppcPreCheck(relayerAccount); err != nil {
 			return
@@ -166,10 +210,10 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 	// Pay intrinsic gas
 	gas, err := IntrinsicGas(st.data, contractCreation, homestead)
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, false, err, dofilterFlag
 	}
 	if err = st.useGas(gas); err != nil {
-		return nil, 0, false, err
+		return nil, 0, false, err, dofilterFlag
 	}
 
 	var (
@@ -203,6 +247,8 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			isBetTx, vmerr := txfilter.PPCDoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil && !isBetTx {
 				ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+			} else if vmerr == nil && isBetTx {
+				dofilterFlag = true
 			}
 		}
 	} else {
@@ -231,6 +277,8 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			isBetTx, vmerr = txfilter.PPCDoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil && !isBetTx {
 				ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+			} else if vmerr == nil && isBetTx {
+				dofilterFlag = true
 			}
 		}
 	}
@@ -241,7 +289,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 		// sufficient balance to make the transfer happen. The first
 		// balance transfer may never fail.
 		if vmerr == vm.ErrInsufficientBalance {
-			return nil, 0, false, vmerr
+			return nil, 0, false, vmerr, dofilterFlag
 		}
 	}
 	if multiRelayerFlag {
@@ -261,7 +309,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 	fmt.Println(gasAmount)
 	Gwei := new(big.Int).Div(gasAmount, new(big.Int).Mul(big.NewInt(1000), big.NewInt(1000000)))
 
-	return ret, Gwei.Uint64(), vmerr != nil, err
+	return ret, Gwei.Uint64(), vmerr != nil, err, dofilterFlag
 }
 
 func (st *StateTransition) ppcPreCheck(relayerAccount *common.Address) error {
@@ -307,6 +355,10 @@ func (st *StateTransition) ppcRefundGas(relayerAccount *common.Address) {
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.
 	st.gp.AddGas(st.gas)
+}
+
+func ppcCATablePersist() {
+	fmt.Println("ppc CA Table Persist")
 }
 
 // rlp decode an etherum transaction

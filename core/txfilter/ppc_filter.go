@@ -29,11 +29,11 @@ func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte)
 				return fmt.Errorf("signer %X already bonded at height %d ,balance has not increased", from, posItem.Height)
 			}
 
-			ppcTxData, err := PPCUnMarshalTxData(txDataBytes)
+			TxData, err := UnMarshalTxData(txDataBytes)
 			if err != nil {
 				return err
 			}
-			pubKey, err := tmTypes.PB2TM.PubKey(ppcTxData.PubKey)
+			pubKey, err := tmTypes.PB2TM.PubKey(TxData.PubKey)
 			if err != nil {
 				return err
 			}
@@ -41,16 +41,16 @@ func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte)
 			if posItem.TmAddress != tmAddress {
 				return fmt.Errorf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
 			}
-			if posItem.BlsKeyString != ppcTxData.BlsKeyString {
-				return fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, ppcTxData.BlsKeyString)
+			if posItem.BlsKeyString != TxData.BlsKeyString {
+				return fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, TxData.BlsKeyString)
 			}
 			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 			if !exist {
 				panic(fmt.Sprintf("tmAddress %v already be bonded by %X, but not found in TmAddressToSignerMap", tmAddress, from))
 			}
-			_, exist = EthPosTable.BlsKeyStringToSignerMap[ppcTxData.BlsKeyString]
+			_, exist = EthPosTable.BlsKeyStringToSignerMap[TxData.BlsKeyString]
 			if !exist {
-				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", ppcTxData.BlsKeyString, from))
+				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", TxData.BlsKeyString, from))
 			}
 
 			return nil
@@ -80,28 +80,28 @@ func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte)
 					return fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
 
-				ppcTxData, err := PPCUnMarshalTxData(txDataBytes)
+				TxData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
 					return err
 				}
-				if len(ppcTxData.BlsKeyString) == 0 {
-					return fmt.Errorf("len(ppcTxData.BlsKeyString)==0, wrong BlsKeyString? %v", ppcTxData.BlsKeyString)
+				if len(TxData.BlsKeyString) == 0 {
+					return fmt.Errorf("len(BlsKeyString)==0, wrong BlsKeyString? %v", TxData.BlsKeyString)
 				}
-				pubKey, err := tmTypes.PB2TM.PubKey(ppcTxData.PubKey)
+				pubKey, err := tmTypes.PB2TM.PubKey(TxData.PubKey)
 				if err != nil {
 					return err
 				}
 				tmAddress := pubKey.Address().String()
 				if len(tmAddress) == 0 {
-					return fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", ppcTxData.PubKey)
+					return fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", TxData.PubKey)
 				}
 				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 				if exist {
 					return fmt.Errorf("tmAddress %v already be bonded by %X", tmAddress, signer)
 				}
-				signer, exist = EthPosTable.BlsKeyStringToSignerMap[ppcTxData.BlsKeyString]
+				signer, exist = EthPosTable.BlsKeyStringToSignerMap[TxData.BlsKeyString]
 				if exist {
-					return fmt.Errorf("blsKeyString %v already be bonded by %X", ppcTxData.BlsKeyString, signer)
+					return fmt.Errorf("blsKeyString %v already be bonded by %X", TxData.BlsKeyString, signer)
 				}
 			}
 		}
@@ -139,11 +139,11 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 				return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
 			}
 
-			ppcTxData, err := PPCUnMarshalTxData(txDataBytes)
+			TxData, err := UnMarshalTxData(txDataBytes)
 			if err != nil {
 				return true, err
 			}
-			pubKey, err := tmTypes.PB2TM.PubKey(ppcTxData.PubKey)
+			pubKey, err := tmTypes.PB2TM.PubKey(TxData.PubKey)
 			if err != nil {
 				return true, err
 			}
@@ -152,17 +152,17 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 				fmt.Printf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
 				return true, fmt.Errorf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
 			}
-			if posItem.BlsKeyString != ppcTxData.BlsKeyString {
-				fmt.Printf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, ppcTxData.BlsKeyString)
-				return true, fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, ppcTxData.BlsKeyString)
+			if posItem.BlsKeyString != TxData.BlsKeyString {
+				fmt.Printf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, TxData.BlsKeyString)
+				return true, fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, TxData.BlsKeyString)
 			}
 			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 			if !exist {
 				panic(fmt.Sprintf("tmAddress %v already be bonded by %X, but not found in TmAddressToSignerMap", tmAddress, from))
 			}
-			_, exist = EthPosTable.BlsKeyStringToSignerMap[ppcTxData.BlsKeyString]
+			_, exist = EthPosTable.BlsKeyStringToSignerMap[TxData.BlsKeyString]
 			if !exist {
-				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", ppcTxData.BlsKeyString, from))
+				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", TxData.BlsKeyString, from))
 			}
 			posItem.Slots = currentSlots
 			EthPosTable.UpsertPosItem(from, posItem)
@@ -188,30 +188,30 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 				fmt.Printf("signer %X has not bonded ", from)
 				return true, fmt.Errorf("signer %X has not bonded ", from)
 			} else if IsLockTx(to) { //first lock
-				ppcTxData, err := PPCUnMarshalTxData(txDataBytes)
+				TxData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
 					return true, err
 				}
-				if len(ppcTxData.BlsKeyString) == 0 {
-					return true, fmt.Errorf("len(ppcTxData.BlsKeyString)==0, wrong BlsKeyString? %v", ppcTxData.BlsKeyString)
+				if len(TxData.BlsKeyString) == 0 {
+					return true, fmt.Errorf("len(BlsKeyString)==0, wrong BlsKeyString? %v", TxData.BlsKeyString)
 				}
-				pubKey, err := tmTypes.PB2TM.PubKey(ppcTxData.PubKey)
+				pubKey, err := tmTypes.PB2TM.PubKey(TxData.PubKey)
 				if err != nil {
 					return true, err
 				}
 				tmAddress := pubKey.Address().String()
 				if len(tmAddress) == 0 {
-					return true, fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", ppcTxData.PubKey)
+					return true, fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", TxData.PubKey)
 				}
 				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
 				if exist {
 					fmt.Printf("tmAddress %v already be bonded by %X", tmAddress, signer)
 					return true, fmt.Errorf("tmAddress %v already be bonded by %X", tmAddress, signer)
 				}
-				signer, exist = EthPosTable.BlsKeyStringToSignerMap[ppcTxData.BlsKeyString]
+				signer, exist = EthPosTable.BlsKeyStringToSignerMap[TxData.BlsKeyString]
 				if exist {
-					fmt.Printf("blsKeyString %v already be bonded by %X", ppcTxData.BlsKeyString, signer)
-					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", ppcTxData.BlsKeyString, signer)
+					fmt.Printf("blsKeyString %v already be bonded by %X", TxData.BlsKeyString, signer)
+					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", TxData.BlsKeyString, signer)
 				}
 
 				//wenbin add, ignore balance judge
@@ -222,7 +222,7 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
-				return true, EthPosTable.UpsertPosItem(from, NewPosItem(height, currentSlots, ppcTxData.PubKey, tmAddress, ppcTxData.BlsKeyString, common.HexToAddress(ppcTxData.Beneficiary)))
+				return true, EthPosTable.UpsertPosItem(from, NewPosItem(height, currentSlots, TxData.PubKey, tmAddress, TxData.BlsKeyString, common.HexToAddress(TxData.Beneficiary)))
 			}
 		}
 	}
