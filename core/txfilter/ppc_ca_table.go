@@ -5,9 +5,8 @@ import (
 )
 
 type PPCCATable struct {
-	ChangedFlagThisBlock bool                              `json:"-"`
+	ChangedFlagThisBlock bool                               `json:"-"`
 	PPCCATableItemMap    map[common.Address]PPCCATableItem `json:"ppc_ca_talbe_item_map"`
-	SuccessBetTxHash     []common.Hash                     `json:"success_bet_hash"`
 }
 
 type PPCCATableItem struct {
@@ -21,8 +20,5 @@ func NewPPCCATable() PPCCATable {
 	return PPCCATable{
 		ChangedFlagThisBlock: false,
 		PPCCATableItemMap:    make(map[common.Address]PPCCATableItem),
-		SuccessBetTxHash:     nil,
 	}
 }
-
-

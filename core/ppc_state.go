@@ -16,11 +16,11 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 	"reflect"
-	"strconv"
 	"unsafe"
 )
 
 var (
+	//one account
 	Bigguy                       = common.HexToAddress("0xb3d49259b486d04505b0b652ade74849c0b703c3")
 	mintGasAccount               = common.HexToAddress("0x5555555555555555555555555555555555555555")
 	SpecifyHeightPosTableAccount = common.HexToAddress("0x1111111111111111111111111111111111111111")
@@ -63,15 +63,15 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		}
 	} else if bytes.Equal(from.Bytes(), Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
 		msg, _ = tx.AsMessageWithPPCFrom(from)
-		mintData, _ := strconv.ParseInt(string(msg.Data()), 10, 64)
-		mintGasNumber = big.NewInt(mintData)
-		mintFlag = true
+		mintData := string(msg.Data())
+		mintGasNumber, mintFlag = new(big.Int).SetString(mintData, 10)
 	} else if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
 		//Init ppcCaTable
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 		ppcTableBytes := statedb.GetCode(PPCCATableAccount)
 		json.Unmarshal(ppcTableBytes, &ppcCATable)
 		statedb.SetCode(PPCCATableAccount, ppcTableBytes)
+		//msg.From must equals Permissoned_address
 		value, isExisted := ppcCATable.PPCCATableItemMap[msg.From()]
 		if isExisted {
 			if !value.Used && (header.Number.Uint64() >= value.StartHeight) &&
@@ -86,45 +86,73 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	} else if bytes.Equal(msg.From().Bytes(), Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), PPCCATableAccount.Bytes()) {
 		//Init ppcCaTable
 		msg, _ = tx.AsMessageWithPPCFrom(from)
+		msgData := string(msg.Data())
+		fmt.Println("----------------------msgData--------------------")
+		fmt.Println(msgData)
+		fmt.Println("----------------------msgData--------------------")
 		ppcTableBytes := statedb.GetCode(PPCCATableAccount)
-		json.Unmarshal(ppcTableBytes, &ppcCATable)
+		fmt.Println("test1.0")
+		fmt.Println(ppcTableBytes)
+		if len(ppcTableBytes) != 0 {
+			error := json.Unmarshal(ppcTableBytes, &ppcCATable)
+			if error != nil {
+				fmt.Println(error)
+				return nil, nil, 0, errors.New("illegal tx")
+			}
+		} else {
+			ppcTableBytes, _ = json.Marshal(ppcCATable)
+		}
+		fmt.Println("test1.1")
 		statedb.SetCode(PPCCATableAccount, ppcTableBytes)
 		//manage PPCCATable by bigguy
-		ppcTxData, err := txfilter.PPCUnMarshalTxData(msg.Data())
+		ppcTxData, err := txfilter.PPCUnMarshalTxData([]byte(msgData))
 		if err != nil {
+			fmt.Println(err)
 			return nil, nil, 0, err
 		}
+		fmt.Println("test1.2")
+		fmt.Println("---------------print data-----------------")
+		fmt.Println(ppcTxData.ApprovedTxData.BlsKeyString)
+		fmt.Println(ppcTxData.ApprovedTxData.Beneficiary)
+		fmt.Println(ppcTxData.ApprovedTxData.PubKey.String())
 		fmt.Println(ppcTxData.EndBlockHeight)
+		fmt.Println("--------------print data------------------")
+		fmt.Println(ppcTxData.OperationType)
 		switch ppcTxData.OperationType {
-		case "update":
+		case "add":
 			{
+				fmt.Println("add item")
 				ppcCATable.ChangedFlagThisBlock = true
-				ppcCATableItem := ppcCATable.PPCCATableItemMap[ppcTxData.OperationAddress]
+				var ppcCATableItem txfilter.PPCCATableItem
 				ppcCATableItem.Used = false
 				ppcCATableItem.ApprovedTxData = ppcTxData.ApprovedTxData
 				ppcCATableItem.StartHeight = ppcTxData.StartBlockHeight
 				ppcCATableItem.EndHeight = ppcTxData.EndBlockHeight
+
+				ppcCATable.PPCCATableItemMap[ppcTxData.PermissonedAddress] = ppcCATableItem
 			}
 		case "remove":
 			{
+				fmt.Println("remove item")
 				ppcCATable.ChangedFlagThisBlock = true
-				delete(ppcCATable.PPCCATableItemMap, ppcTxData.OperationAddress)
+				delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
 			}
 		case "kickout":
 			{
+				fmt.Println("kickout item")
 				//directly remove user in pos_table by bigguy
 				ppcCATable.ChangedFlagThisBlock = true
-				delete(ppcCATable.PPCCATableItemMap, ppcTxData.OperationAddress)
-				msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.OperationAddress, txfilter.SendToUnlock)
+				delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
+				msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.PermissonedAddress, txfilter.SendToUnlock)
 			}
 		}
-
 	}
 	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable)
 
 	//persist ppcCaTable
 	if ppcCATable.ChangedFlagThisBlock {
 		curBytes, _ := json.Marshal(ppcCATable)
+		fmt.Println("persist ppccatable")
 		fmt.Println(string(curBytes))
 		statedb.SetCode(PPCCATableAccount, curBytes)
 	}
@@ -162,12 +190,17 @@ func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, auth
 		receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, tx.Nonce())
 	}
 	// Set the receipt logs and create a bloom for filtering
+	fmt.Println("---------------------tx hash----------------------")
 	receipt.Logs = statedb.GetLogs(tx.Hash())
+	fmt.Println(tx.Hash())
+	fmt.Println(statedb.GetLogs(tx.Hash()))
+	fmt.Println("----------------------logs-----------------------")
+	fmt.Println(receipt.Logs)
+	fmt.Println("----------------------logs-----------------------")
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
 	if doFilterFlag {
 		ppcCATable.ChangedFlagThisBlock = true
-		ppcCATable.SuccessBetTxHash = append(ppcCATable.SuccessBetTxHash, tx.Hash())
 		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
 			ppcCATableItem := ppcCATable.PPCCATableItemMap[msg.From()]
 			ppcCATableItem.Used = true
@@ -302,11 +335,10 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 
 	//If mintFlag is true,mint gas to Bigguy
 	if mintFlag {
-		st.state.AddBalance(Bigguy, new(big.Int).Mul(mintGasNumber, big.NewInt(1000000000000000000)))
+		st.state.AddBalance(Bigguy, mintGasNumber)
 	}
 
 	gasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
-	fmt.Println(gasAmount)
 	Gwei := new(big.Int).Div(gasAmount, new(big.Int).Mul(big.NewInt(1000), big.NewInt(1000000)))
 
 	return ret, Gwei.Uint64(), vmerr != nil, err, dofilterFlag
@@ -355,10 +387,6 @@ func (st *StateTransition) ppcRefundGas(relayerAccount *common.Address) {
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.
 	st.gp.AddGas(st.gas)
-}
-
-func ppcCATablePersist() {
-	fmt.Println("ppc CA Table Persist")
 }
 
 // rlp decode an etherum transaction
