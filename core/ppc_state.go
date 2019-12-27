@@ -34,6 +34,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	multiRelayerFlag := false
 	var mintGasNumber *big.Int
 	var relayerAccount common.Address
+	var originHash common.Hash
 
 	ppcCATable := txfilter.NewPPCCATable()
 
@@ -44,6 +45,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		if msg.To() == nil {
 		} else if bytes.Equal(msg.To().Bytes(), RelayAccount.Bytes()) {
 			relayerAccount = msg.From()
+			originHash = tx.Hash()
 			tx, _ = ppcDecodeTx(msg.Data())
 
 			var signer types.Signer = types.HomesteadSigner{}
@@ -87,9 +89,6 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		//Init ppcCaTable
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 		msgData := string(msg.Data())
-		fmt.Println("----------------------msgData--------------------")
-		fmt.Println(msgData)
-		fmt.Println("----------------------msgData--------------------")
 		ppcTableBytes := statedb.GetCode(PPCCATableAccount)
 		fmt.Println("test1.0")
 		fmt.Println(ppcTableBytes)
@@ -147,7 +146,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			}
 		}
 	}
-	r, u, e := ppcApplyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable)
+	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable)
 
 	//persist ppcCaTable
 	if ppcCATable.ChangedFlagThisBlock {
@@ -160,7 +159,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	return r, msg, u, e
 }
 
-func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, ppcCATable *txfilter.PPCCATable) (*types.Receipt, uint64, error) {
+func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, ppcCATable *txfilter.PPCCATable) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
@@ -183,20 +182,14 @@ func ppcApplyTransactionMessage(config *params.ChainConfig, bc *BlockChain, auth
 	// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
 	// based on the eip phase, we're passing wether the root touch-delete accounts.
 	receipt := types.NewReceipt(root, failed, *usedGas)
-	receipt.TxHash = tx.Hash()
+	receipt.TxHash = originHash
 	receipt.GasUsed = gas
 	// if the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, tx.Nonce())
 	}
 	// Set the receipt logs and create a bloom for filtering
-	fmt.Println("---------------------tx hash----------------------")
-	receipt.Logs = statedb.GetLogs(tx.Hash())
-	fmt.Println(tx.Hash())
-	fmt.Println(statedb.GetLogs(tx.Hash()))
-	fmt.Println("----------------------logs-----------------------")
-	fmt.Println(receipt.Logs)
-	fmt.Println("----------------------logs-----------------------")
+	receipt.Logs = statedb.GetLogs(originHash)
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
 	if doFilterFlag {
