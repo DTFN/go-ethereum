@@ -19,16 +19,6 @@ import (
 	"unsafe"
 )
 
-var (
-	//one account
-	Bigguy                       = common.HexToAddress("0xb3d49259b486d04505b0b652ade74849c0b703c3")
-	mintGasAccount               = common.HexToAddress("0x5555555555555555555555555555555555555555")
-	SpecifyHeightPosTableAccount = common.HexToAddress("0x1111111111111111111111111111111111111111")
-	PPCCATableAccount            = common.HexToAddress("0x2222222222222222222222222222222222222222")
-	RelayAccount                 = common.HexToAddress("0x3333333333333333333333333333333333333333")
-	UpgradeHeight                = 30
-)
-
 func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
 	msg, _ := tx.AsMessageWithFrom(from)
 	mintFlag := false
@@ -40,14 +30,14 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	ppcCATable := txfilter.NewPPCCATable()
 
 	//ignore value to forbid  eth-transfer
-	if !bytes.Equal(from.Bytes(), Bigguy.Bytes()) {
+	if !bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) {
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 		//skip deploy contract tx
 		if msg.To() == nil {
-		} else if bytes.Equal(msg.To().Bytes(), RelayAccount.Bytes()) {
+		} else if bytes.Equal(msg.To().Bytes(), txfilter.RelayAccount.Bytes()) {
 			relayerAccount = msg.From()
 			originHash = tx.Hash()
-			tx, _ = ppcDecodeTx(msg.Data())
+			tx, _ = PPCDecodeTx(msg.Data())
 
 			var signer types.Signer = types.HomesteadSigner{}
 			if tx.Protected() {
@@ -64,16 +54,16 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			from = subFrom
 			multiRelayerFlag = true
 		}
-	} else if bytes.Equal(from.Bytes(), Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), mintGasAccount.Bytes()) {
+	} else if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 		mintData := string(msg.Data())
 		mintGasNumber, mintFlag = new(big.Int).SetString(mintData, 10)
 	} else if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
 		//Init ppcCaTable
 		msg, _ = tx.AsMessageWithPPCFrom(from)
-		ppcTableBytes := statedb.GetCode(PPCCATableAccount)
+		ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
 		json.Unmarshal(ppcTableBytes, &ppcCATable)
-		statedb.SetCode(PPCCATableAccount, ppcTableBytes)
+		statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 		//msg.From must equals Permissoned_address
 		value, isExisted := ppcCATable.PPCCATableItemMap[msg.From()]
 		if isExisted {
@@ -86,30 +76,20 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		} else {
 			return nil, nil, 0, errors.New("illeagal tx")
 		}
-	} else if bytes.Equal(msg.From().Bytes(), Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), PPCCATableAccount.Bytes()) {
+	} else if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
 		//Init ppcCaTable
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 		msgData := string(msg.Data())
-		ppcTableBytes := statedb.GetCode(PPCCATableAccount)
-		fmt.Println("test1.0")
-		fmt.Println(ppcTableBytes)
+		ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
 		if len(ppcTableBytes) != 0 {
-			error := json.Unmarshal(ppcTableBytes, &ppcCATable)
-			if error != nil {
-				fmt.Println(error)
-				return nil, nil, 0, errors.New("illegal tx")
-			}
+			json.Unmarshal(ppcTableBytes, &ppcCATable)
 		} else {
 			ppcTableBytes, _ = json.Marshal(ppcCATable)
 		}
 		fmt.Println("test1.1")
-		statedb.SetCode(PPCCATableAccount, ppcTableBytes)
+		statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 		//manage PPCCATable by bigguy
-		ppcTxData, err := txfilter.PPCUnMarshalTxData([]byte(msgData))
-		if err != nil {
-			fmt.Println(err)
-			return nil, nil, 0, err
-		}
+		ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
 		fmt.Println("test1.2")
 		fmt.Println("---------------print data-----------------")
 		fmt.Println(ppcTxData.ApprovedTxData.BlsKeyString)
@@ -146,6 +126,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.PermissonedAddress, txfilter.SendToUnlock)
 			}
 		}
+		txfilter.PPCCATableCopy = &ppcCATable
 	}
 	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable)
 
@@ -154,7 +135,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		curBytes, _ := json.Marshal(ppcCATable)
 		fmt.Println("persist ppccatable")
 		fmt.Println(string(curBytes))
-		statedb.SetCode(PPCCATableAccount, curBytes)
+		statedb.SetCode(txfilter.PPCCATableAccount, curBytes)
 	}
 
 	return r, msg, u, e
@@ -325,11 +306,11 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 		st.refundGas()
 	}
 
-	st.state.AddBalance(Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	st.state.AddBalance(txfilter.Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
 	//If mintFlag is true,mint gas to Bigguy
 	if mintFlag {
-		st.state.AddBalance(Bigguy, mintGasNumber)
+		st.state.AddBalance(txfilter.Bigguy, mintGasNumber)
 	}
 
 	gasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
@@ -383,8 +364,14 @@ func (st *StateTransition) ppcRefundGas(relayerAccount *common.Address) {
 	st.gp.AddGas(st.gas)
 }
 
+func BytesToString(b []byte) string {
+	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	sh := reflect.StringHeader{bh.Data, bh.Len}
+	return *(*string)(unsafe.Pointer(&sh))
+}
+
 // rlp decode an etherum transaction
-func ppcDecodeTx(txBytes []byte) (*types.Transaction, error) {
+func PPCDecodeTx(txBytes []byte) (*types.Transaction, error) {
 	tx := new(types.Transaction)
 	rlpStream := rlp.NewStream(bytes.NewBuffer(txBytes), 0)
 	if err := tx.DecodeRLP(rlpStream); err != nil {
@@ -393,8 +380,48 @@ func ppcDecodeTx(txBytes []byte) (*types.Transaction, error) {
 	return tx, nil
 }
 
-func BytesToString(b []byte) string {
-	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
-	sh := reflect.StringHeader{bh.Data, bh.Len}
-	return *(*string)(unsafe.Pointer(&sh))
+func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byte, currHeight uint64, statedb *state.StateDB) (err error) {
+	//verify whether the ppc-approved data is valid
+	if txfilter.IsBigGuy(from) && txfilter.IsPPCCATableAccount(to) {
+		_, err := txfilter.PPCUnMarshalTxData(txDataBytes)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+	} else if txfilter.IsLockTx(to) {
+		value, isExisted := txfilter.PPCCATableCopy.PPCCATableItemMap[from]
+		if isExisted {
+			if !value.Used && (currHeight >= value.StartHeight) &&
+				(currHeight <= value.EndHeight) {
+				//approved bet tx,go ahead
+			} else {
+				return errors.New("unmatched height for bet tx")
+			}
+		} else {
+			return errors.New("bet tx doesn't exist in the ppccatable")
+		}
+	} else if txfilter.IsRelayAccount(to) {
+		tx, _ := PPCDecodeTx(txDataBytes)
+
+		var signer types.Signer = types.HomesteadSigner{}
+		if tx.Protected() {
+			signer = types.NewEIP155Signer(tx.ChainId())
+		}
+		var err error
+		// Make sure the transaction is signed properly
+		subFrom, err := types.Sender(signer, tx)
+		if err != nil {
+			return err
+		}
+		fmt.Println(subFrom)
+
+		//sub nonce plus plus???
+		//allow bigger nonce come in
+		nonce := statedb.GetNonce(subFrom)
+		if nonce > tx.Nonce() {
+			return ErrNonceTooLow
+		}
+	}
+	fmt.Println("format ppc illeagl")
+	return nil
 }

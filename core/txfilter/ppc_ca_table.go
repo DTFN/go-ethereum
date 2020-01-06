@@ -5,7 +5,7 @@ import (
 )
 
 type PPCCATable struct {
-	ChangedFlagThisBlock bool                               `json:"-"`
+	ChangedFlagThisBlock bool                              `json:"-"`
 	PPCCATableItemMap    map[common.Address]PPCCATableItem `json:"ppc_ca_talbe_item_map"`
 }
 

@@ -5,6 +5,21 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	tmTypes "github.com/tendermint/tendermint/types"
 	"math/big"
+	"strings"
+)
+
+var (
+	//one account
+	Bigguy                       = common.HexToAddress("0xb3d49259b486d04505b0b652ade74849c0b703c3")
+	MintGasAccount               = common.HexToAddress("0x5555555555555555555555555555555555555555")
+	SpecifyHeightPosTableAccount = common.HexToAddress("0x1111111111111111111111111111111111111111")
+	PPCCATableAccount            = common.HexToAddress("0x2222222222222222222222222222222222222222")
+	RelayAccount                 = common.HexToAddress("0x3333333333333333333333333333333333333333")
+	UpgradeHeight                = 30
+)
+
+var (
+	PPCCATableCopy *PPCCATable
 )
 
 func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
@@ -232,7 +247,14 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 }
 
 
-func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
-	fmt.Println("format ppc illeagl")
-	return nil
+func IsBigGuy(from common.Address) bool {
+	return strings.EqualFold(from.String(), Bigguy.String())
+}
+
+func IsPPCCATableAccount(to common.Address) bool {
+	return strings.EqualFold(to.String(), PPCCATableAccount.String())
+}
+
+func IsRelayAccount(to common.Address) bool {
+	return strings.EqualFold(to.String(), RelayAccount.String())
 }
