@@ -651,14 +651,14 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// the added tx will be used in the nextBlock
 	nextBlockNumber := pool.chain.CurrentBlock().Number().Int64() + 1
 	if nextBlockNumber >= int64(UpgradeHeight) {
-		fmt.Println("---------try to print txpool block number--------------")
-		fmt.Println(pool.chain.CurrentBlock().Number().Int64() + 1)
-		fmt.Println("---------try to print txpool block number--------------")
-		fmt.Println("-------------UpgradeHeight------------------")
-		fmt.Println(UpgradeHeight)
-		fmt.Println("-------------UpgradeHeight------------------")
 		err = txfilter.PPCIllegalForm(from, *to, pool.currentState.GetBalance(from), tx.Data())
 		if err!= nil{
+			return err
+		}
+
+		//validate ppcIsBetTx
+		err = txfilter.PPCIsBlocked(from, *to, pool.currentState.GetBalance(from), tx.Data())
+		if err != nil {
 			return err
 		}
 	} else {
