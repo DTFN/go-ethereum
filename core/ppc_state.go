@@ -26,6 +26,7 @@ var (
 	SpecifyHeightPosTableAccount = common.HexToAddress("0x1111111111111111111111111111111111111111")
 	PPCCATableAccount            = common.HexToAddress("0x2222222222222222222222222222222222222222")
 	RelayAccount                 = common.HexToAddress("0x3333333333333333333333333333333333333333")
+	UpgradeHeight                = 30
 )
 
 func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {

@@ -230,3 +230,9 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 	}
 	return false, nil
 }
+
+
+func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
+	fmt.Println("format ppc illeagl")
+	return nil
+}
