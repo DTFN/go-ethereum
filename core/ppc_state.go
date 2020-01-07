@@ -443,13 +443,11 @@ func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byt
 		}
 		fmt.Println(subFrom)
 
-		//sub nonce plus plus???
 		//allow bigger nonce come in
 		nonce := statedb.GetNonce(subFrom)
 		if nonce > tx.Nonce() {
 			return ErrNonceTooLow
 		}
 	}
-	fmt.Println("format ppc illeagl")
 	return nil
 }
