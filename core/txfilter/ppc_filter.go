@@ -9,10 +9,7 @@ import (
 )
 
 var (
-	//one account
-	//Bigguy                       = common.HexToAddress("0xb3d49259b486d04505b0b652ade74849c0b703c3")
-	MintGasAccount               = common.HexToAddress("0x5555555555555555555555555555555555555555")
-	SpecifyHeightPosTableAccount = common.HexToAddress("0x1111111111111111111111111111111111111111")
+	MintGasAccount               = common.HexToAddress("0x1111111111111111111111111111111111111111")
 	PPCCATableAccount            = common.HexToAddress("0x2222222222222222222222222222222222222222")
 	RelayAccount                 = common.HexToAddress("0x3333333333333333333333333333333333333333")
 )
