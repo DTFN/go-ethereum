@@ -10,10 +10,10 @@ type PPCCATable struct {
 }
 
 type PPCCATableItem struct {
-	ApprovedTxData TxData `json:"approved_tx_data"`
-	StartHeight    uint64 `json:"start_height"`
-	EndHeight      uint64 `json:"end_height"`
-	Used           bool   `json:"used"`
+	ApprovedTxDataHash string `json:"approved_tx_data_hash"`
+	StartHeight        uint64 `json:"start_height"`
+	EndHeight          uint64 `json:"end_height"`
+	Used               bool   `json:"used"`
 }
 
 func NewPPCCATable() PPCCATable {

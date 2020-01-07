@@ -2,6 +2,8 @@ package core
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,7 +71,18 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		if isExisted {
 			if !value.Used && (header.Number.Uint64() >= value.StartHeight) &&
 				(header.Number.Uint64() <= value.EndHeight) {
-				//approved bet tx,go ahead
+				//verify whether txdata equals approved txdata
+				txData, err := txfilter.UnMarshalTxData(msg.Data())
+				if err != nil {
+					return nil, nil, 0, errors.New("inillegal format txdata")
+				}
+				txDataStr, _ := json.Marshal(txData)
+				data := []byte(txDataStr)
+				hashData := md5.Sum(data)
+				hashStr := hex.EncodeToString(hashData[:])
+				if hashStr != value.ApprovedTxDataHash {
+					return nil, nil, 0, errors.New("txData doesn't match approved txData")
+				}
 			} else {
 				return nil, nil, 0, errors.New("illeagal tx")
 			}
@@ -86,11 +99,9 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		} else {
 			ppcTableBytes, _ = json.Marshal(ppcCATable)
 		}
-		fmt.Println("test1.1")
 		statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 		//manage PPCCATable by bigguy
 		ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
-		fmt.Println("test1.2")
 		fmt.Println("---------------print data-----------------")
 		fmt.Println(ppcTxData.ApprovedTxData.BlsKeyString)
 		fmt.Println(ppcTxData.ApprovedTxData.Beneficiary)
@@ -105,7 +116,12 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				ppcCATable.ChangedFlagThisBlock = true
 				var ppcCATableItem txfilter.PPCCATableItem
 				ppcCATableItem.Used = false
-				ppcCATableItem.ApprovedTxData = ppcTxData.ApprovedTxData
+
+				txDataStr, _ := json.Marshal(ppcTxData.ApprovedTxData)
+				data := []byte(txDataStr)
+				hashData := md5.Sum(data)
+
+				ppcCATableItem.ApprovedTxDataHash = hex.EncodeToString(hashData[:])
 				ppcCATableItem.StartHeight = ppcTxData.StartBlockHeight
 				ppcCATableItem.EndHeight = ppcTxData.EndBlockHeight
 
@@ -394,6 +410,18 @@ func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byt
 			if !value.Used && (currHeight >= value.StartHeight) &&
 				(currHeight <= value.EndHeight) {
 				//approved bet tx,go ahead
+				txData, err := txfilter.UnMarshalTxData(txDataBytes)
+				if err != nil {
+					return errors.New("inillegal format txdata")
+				}
+				txDataStr, _ := json.Marshal(txData)
+				data := []byte(txDataStr)
+				hashData := md5.Sum(data)
+				hashStr := hex.EncodeToString(hashData[:])
+				if hashStr != value.ApprovedTxDataHash {
+					return errors.New("txData doesn't match approved txData")
+				}
+
 			} else {
 				return errors.New("unmatched height for bet tx")
 			}
