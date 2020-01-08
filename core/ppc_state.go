@@ -193,14 +193,22 @@ func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConf
 	// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
 	// based on the eip phase, we're passing wether the root touch-delete accounts.
 	receipt := types.NewReceipt(root, failed, *usedGas)
-	receipt.TxHash = originHash
+	if multiRelayerFlag {
+		receipt.TxHash = originHash
+	} else {
+		receipt.TxHash = tx.Hash()
+	}
 	receipt.GasUsed = gas
 	// if the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, tx.Nonce())
 	}
 	// Set the receipt logs and create a bloom for filtering
-	receipt.Logs = statedb.GetLogs(originHash)
+	if multiRelayerFlag {
+		receipt.Logs = statedb.GetLogs(originHash)
+	} else {
+		receipt.Logs = statedb.GetLogs(tx.Hash())
+	}
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
 	if doFilterFlag {
