@@ -22,22 +22,58 @@ import (
 )
 
 func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
-	msg, _ := tx.AsMessageWithFrom(from)
 	mintFlag := false
 	multiRelayerFlag := false
 	kickoutFlag := false
+
+	var msg types.Message
 	var mintGasNumber *big.Int
 	var relayerAccount common.Address
 	var originHash common.Hash
-
 	ppcCATable := txfilter.NewPPCCATable()
 
-	//ignore value to forbid  eth-transfer
-	if !bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) {
+	if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) {
+		msg, _ = tx.AsMessageWithFrom(from)
+	} else {
+		//ignore tx.data.amout to forbid eth-transfer-tx
 		msg, _ = tx.AsMessageWithPPCFrom(from)
-		//skip deploy contract tx
-		if msg.To() == nil {
-		} else if bytes.Equal(msg.To().Bytes(), txfilter.RelayAccount.Bytes()) {
+	}
+
+	if msg.To() == nil {
+	} else {
+		//bigguy may as relayyer and send bet-tx and deploy-contract
+		//This is a bet-tx maybe sent by anyone
+		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
+			//Init ppcCaTable
+			ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
+			json.Unmarshal(ppcTableBytes, &ppcCATable)
+			statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
+			//msg.From must equals Permissoned_address
+			value, isExisted := ppcCATable.PPCCATableItemMap[msg.From()]
+			if isExisted {
+				if !value.Used && (header.Number.Uint64() >= value.StartHeight) &&
+					(header.Number.Uint64() <= value.EndHeight) {
+					//verify whether txdata equals approved txdata
+					txData, err := txfilter.UnMarshalTxData(msg.Data())
+					if err != nil {
+						return nil, nil, 0, errors.New("inillegal format txdata")
+					}
+					txDataStr, _ := json.Marshal(txData)
+					data := []byte(txDataStr)
+					hashData := md5.Sum(data)
+					hashStr := hex.EncodeToString(hashData[:])
+					if hashStr != value.ApprovedTxDataHash {
+						return nil, nil, 0, errors.New("txData doesn't match approved txData")
+					}
+				} else {
+					return nil, nil, 0, errors.New("illeagal tx")
+				}
+			} else {
+				return nil, nil, 0, errors.New("illeagal tx")
+			}
+		}
+		//This is a relay-tx maybe sent by anyone
+		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAccount.Bytes()) {
 			relayerAccount = msg.From()
 			originHash = tx.Hash()
 			tx, _ = PPCDecodeTx(msg.Data())
@@ -57,95 +93,70 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			from = subFrom
 			multiRelayerFlag = true
 		}
-	} else if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
-		msg, _ = tx.AsMessageWithPPCFrom(from)
-		mintData := string(msg.Data())
-		mintGasNumber, mintFlag = new(big.Int).SetString(mintData, 10)
-	} else if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
-		//Init ppcCaTable
-		msg, _ = tx.AsMessageWithPPCFrom(from)
-		ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
-		json.Unmarshal(ppcTableBytes, &ppcCATable)
-		statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
-		//msg.From must equals Permissoned_address
-		value, isExisted := ppcCATable.PPCCATableItemMap[msg.From()]
-		if isExisted {
-			if !value.Used && (header.Number.Uint64() >= value.StartHeight) &&
-				(header.Number.Uint64() <= value.EndHeight) {
-				//verify whether txdata equals approved txdata
-				txData, err := txfilter.UnMarshalTxData(msg.Data())
-				if err != nil {
-					return nil, nil, 0, errors.New("inillegal format txdata")
-				}
-				txDataStr, _ := json.Marshal(txData)
-				data := []byte(txDataStr)
-				hashData := md5.Sum(data)
-				hashStr := hex.EncodeToString(hashData[:])
-				if hashStr != value.ApprovedTxDataHash {
-					return nil, nil, 0, errors.New("txData doesn't match approved txData")
-				}
+		//This is an approved-tx sent by bigguy
+		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
+			//Init ppcCaTable
+			msg, _ = tx.AsMessageWithPPCFrom(from)
+			msgData := string(msg.Data())
+			ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
+			if len(ppcTableBytes) != 0 {
+				json.Unmarshal(ppcTableBytes, &ppcCATable)
 			} else {
-				return nil, nil, 0, errors.New("illeagal tx")
+				ppcTableBytes, _ = json.Marshal(ppcCATable)
 			}
-		} else {
-			return nil, nil, 0, errors.New("illeagal tx")
-		}
-	} else if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
-		//Init ppcCaTable
-		msg, _ = tx.AsMessageWithPPCFrom(from)
-		msgData := string(msg.Data())
-		ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
-		if len(ppcTableBytes) != 0 {
-			json.Unmarshal(ppcTableBytes, &ppcCATable)
-		} else {
-			ppcTableBytes, _ = json.Marshal(ppcCATable)
-		}
-		statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
-		//manage PPCCATable by bigguy
-		ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
-		fmt.Println("---------------print data-----------------")
-		fmt.Println(ppcTxData.ApprovedTxData.BlsKeyString)
-		fmt.Println(ppcTxData.ApprovedTxData.Beneficiary)
-		fmt.Println(ppcTxData.ApprovedTxData.PubKey.String())
-		fmt.Println(ppcTxData.EndBlockHeight)
-		fmt.Println("--------------print data------------------")
-		fmt.Println(ppcTxData.OperationType)
-		switch ppcTxData.OperationType {
-		case "add":
-			{
-				fmt.Println("add item")
-				ppcCATable.ChangedFlagThisBlock = true
-				var ppcCATableItem txfilter.PPCCATableItem
-				ppcCATableItem.Used = false
+			statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
+			//manage PPCCATable by bigguy
+			ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
+			fmt.Println("---------------print data-----------------")
+			fmt.Println(ppcTxData.ApprovedTxData.BlsKeyString)
+			fmt.Println(ppcTxData.ApprovedTxData.Beneficiary)
+			fmt.Println(ppcTxData.ApprovedTxData.PubKey.String())
+			fmt.Println(ppcTxData.EndBlockHeight)
+			fmt.Println("--------------print data------------------")
+			fmt.Println(ppcTxData.OperationType)
+			switch ppcTxData.OperationType {
+			case "add":
+				{
+					fmt.Println("add item")
+					ppcCATable.ChangedFlagThisBlock = true
+					var ppcCATableItem txfilter.PPCCATableItem
+					ppcCATableItem.Used = false
 
-				txDataStr, _ := json.Marshal(ppcTxData.ApprovedTxData)
-				data := []byte(txDataStr)
-				hashData := md5.Sum(data)
+					txDataStr, _ := json.Marshal(ppcTxData.ApprovedTxData)
+					data := []byte(txDataStr)
+					hashData := md5.Sum(data)
 
-				ppcCATableItem.ApprovedTxDataHash = hex.EncodeToString(hashData[:])
-				ppcCATableItem.StartHeight = ppcTxData.StartBlockHeight
-				ppcCATableItem.EndHeight = ppcTxData.EndBlockHeight
+					ppcCATableItem.ApprovedTxDataHash = hex.EncodeToString(hashData[:])
+					ppcCATableItem.StartHeight = ppcTxData.StartBlockHeight
+					ppcCATableItem.EndHeight = ppcTxData.EndBlockHeight
 
-				ppcCATable.PPCCATableItemMap[ppcTxData.PermissonedAddress] = ppcCATableItem
+					ppcCATable.PPCCATableItemMap[ppcTxData.PermissonedAddress] = ppcCATableItem
+				}
+			case "remove":
+				{
+					fmt.Println("remove item")
+					ppcCATable.ChangedFlagThisBlock = true
+					delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
+				}
+			case "kickout":
+				{
+					fmt.Println("kickout item")
+					//directly remove user in pos_table by bigguy
+					ppcCATable.ChangedFlagThisBlock = true
+					kickoutFlag = true
+					delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
+					msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.PermissonedAddress, txfilter.SendToUnlock)
+				}
 			}
-		case "remove":
-			{
-				fmt.Println("remove item")
-				ppcCATable.ChangedFlagThisBlock = true
-				delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
-			}
-		case "kickout":
-			{
-				fmt.Println("kickout item")
-				//directly remove user in pos_table by bigguy
-				ppcCATable.ChangedFlagThisBlock = true
-				kickoutFlag = true
-				delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
-				msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.PermissonedAddress, txfilter.SendToUnlock)
-			}
+			txfilter.PPCCATableCopy = &ppcCATable
 		}
-		txfilter.PPCCATableCopy = &ppcCATable
+		//This is a mint-tx sent by bigguy
+		if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
+			mintData := string(msg.Data())
+			mintGasNumber, mintFlag = new(big.Int).SetString(mintData, 10)
+		}
 	}
+
 	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable, kickoutFlag)
 
 	//persist ppcCaTable
