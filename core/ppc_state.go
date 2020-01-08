@@ -25,6 +25,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	msg, _ := tx.AsMessageWithFrom(from)
 	mintFlag := false
 	multiRelayerFlag := false
+	kickoutFlag := false
 	var mintGasNumber *big.Int
 	var relayerAccount common.Address
 	var originHash common.Hash
@@ -138,13 +139,14 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				fmt.Println("kickout item")
 				//directly remove user in pos_table by bigguy
 				ppcCATable.ChangedFlagThisBlock = true
+				kickoutFlag = true
 				delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
 				msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.PermissonedAddress, txfilter.SendToUnlock)
 			}
 		}
 		txfilter.PPCCATableCopy = &ppcCATable
 	}
-	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable)
+	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable, kickoutFlag)
 
 	//persist ppcCaTable
 	if ppcCATable.ChangedFlagThisBlock {
@@ -157,14 +159,14 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	return r, msg, u, e
 }
 
-func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, ppcCATable *txfilter.PPCCATable) (*types.Receipt, uint64, error) {
+func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, ppcCATable *txfilter.PPCCATable, kickoutFlag bool) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
 	// Apply the transaction to the current state (included in the env)
-	_, gas, failed, err, doFilterFlag := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount)
+	_, gas, failed, err, doFilterFlag := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, kickoutFlag)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -208,17 +210,21 @@ func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConf
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address) ([]byte, uint64, bool, error, bool) {
-	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount)
+func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, kickoutFlag bool) ([]byte, uint64, bool, error, bool) {
+	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, kickoutFlag)
 }
 
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address) (ret []byte, usedGas uint64, failed bool, err error, DofilterFlag bool) {
+func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, kickoutFlag bool) (ret []byte, usedGas uint64, failed bool, err error, DofilterFlag bool) {
 	dofilterFlag := false
 	if multiRelayerFlag {
 		if err = st.ppcPreCheck(relayerAccount); err != nil {
+			return
+		}
+	} else if kickoutFlag {
+		if err = st.ppcKickoutPreCheck(); err != nil {
 			return
 		}
 	} else {
@@ -262,7 +268,11 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			}
 		} else {
 			// Increment the nonce for the next transaction
-			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			if !kickoutFlag {
+				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			} else {
+				st.state.SetNonce(txfilter.Bigguy, st.state.GetNonce(txfilter.Bigguy)+1)
+			}
 			//wenbin add,support multi-tx nonce
 			if multiRelayerFlag {
 				st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
@@ -290,7 +300,11 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			}
 		} else {
 			// Increment the nonce for the next transaction
-			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			if !kickoutFlag {
+				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			} else {
+				st.state.SetNonce(txfilter.Bigguy, st.state.GetNonce(txfilter.Bigguy)+1)
+			}
 
 			//wenbin add,support multi-tx nonce
 			if multiRelayerFlag {
@@ -333,6 +347,19 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 	Gwei := new(big.Int).Div(gasAmount, new(big.Int).Mul(big.NewInt(1000), big.NewInt(1000000)))
 
 	return ret, Gwei.Uint64(), vmerr != nil, err, dofilterFlag
+}
+
+func (st *StateTransition) ppcKickoutPreCheck() error {
+	// Make sure this transaction's nonce is correct.
+	if st.msg.CheckNonce() {
+		nonce := st.state.GetNonce(txfilter.Bigguy)
+		if nonce < st.msg.Nonce() {
+			return ErrNonceTooHigh
+		} else if nonce > st.msg.Nonce() {
+			return ErrNonceTooLow
+		}
+	}
+	return st.buyGas()
 }
 
 func (st *StateTransition) ppcPreCheck(relayerAccount *common.Address) error {

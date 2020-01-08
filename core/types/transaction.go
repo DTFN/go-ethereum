@@ -263,12 +263,12 @@ func (tx *Transaction) AsMessageWithPPCFrom(from common.Address) (Message, error
 	return msg, nil
 }
 
-func (tx *Transaction) AsMessageWithKickoutFrom(from,to common.Address) (Message, error) {
+func (tx *Transaction) AsMessageWithKickoutFrom(from, to common.Address) (Message, error) {
 	msg := Message{
 		nonce:      tx.data.AccountNonce,
 		gasLimit:   tx.data.GasLimit,
 		gasPrice:   new(big.Int).Set(tx.data.Price),
-		to:         tx.data.Recipient,
+		to:         &to,
 		from:       from,
 		amount:     big.NewInt(0),
 		data:       tx.data.Payload,
