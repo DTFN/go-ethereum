@@ -650,7 +650,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// pool.chain.CurrentBlock.Number.Int64()+1 = nextBlock Number
 	// the added tx will be used in the nextBlock
 	nextBlockNumber := pool.chain.CurrentBlock().Number().Uint64() + 1
-	if nextBlockNumber >= uint64(*txfilter.UpgradeHeight) {
+	if nextBlockNumber >= uint64(txfilter.UpgradeHeight) {
 		err = PPCIllegalForm(from, *to, pool.currentState.GetBalance(from), tx.Data(),nextBlockNumber,pool.currentState)
 		if err!= nil{
 			return err

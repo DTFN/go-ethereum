@@ -16,7 +16,7 @@ var (
 
 var (
 	PPCCATableCopy *PPCCATable
-	UpgradeHeight  *int64
+	UpgradeHeight  int64
 	Bigguy         common.Address
 )
 
