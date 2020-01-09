@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -52,10 +51,6 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		//bigguy may as relayyer and send bet-tx and deploy-contract
 		//This is a bet-tx maybe sent by anyone
 		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
-			//Init ppcCaTable
-			//ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
-			//json.Unmarshal(ppcTableBytes, &ppcCATable)
-			//statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 			//msg.From must equals Permissoned_address
 			value, isExisted := ppcCATable.PPCCATableItemMap[msg.From()]
 			if isExisted {
@@ -106,26 +101,11 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			//Init ppcCaTable
 			msg, _ = tx.AsMessageWithPPCFrom(from)
 			msgData := string(msg.Data())
-			//ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
-			//if len(ppcTableBytes) != 0 {
-			//	json.Unmarshal(ppcTableBytes, &ppcCATable)
-			//} else {
-			//	ppcTableBytes, _ = json.Marshal(ppcCATable)
-			//}
-			//statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 			//manage PPCCATable by bigguy
 			ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
-			fmt.Println("---------------print data-----------------")
-			fmt.Println(ppcTxData.ApprovedTxData.BlsKeyString)
-			fmt.Println(ppcTxData.ApprovedTxData.Beneficiary)
-			fmt.Println(ppcTxData.ApprovedTxData.PubKey.String())
-			fmt.Println(ppcTxData.EndBlockHeight)
-			fmt.Println("--------------print data------------------")
-			fmt.Println(ppcTxData.OperationType)
 			switch ppcTxData.OperationType {
 			case "add":
 				{
-					fmt.Println("add item")
 					ppcCATable.ChangedFlagThisBlock = true
 					var ppcCATableItem txfilter.PPCCATableItem
 					ppcCATableItem.Used = false
@@ -142,13 +122,11 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				}
 			case "remove":
 				{
-					fmt.Println("remove item")
 					ppcCATable.ChangedFlagThisBlock = true
 					delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
 				}
 			case "kickout":
 				{
-					fmt.Println("kickout item")
 					//directly remove user in pos_table by bigguy
 					ppcCATable.ChangedFlagThisBlock = true
 					kickoutFlag = true
@@ -171,8 +149,6 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	//persist ppcCaTable
 	if ppcCATable.ChangedFlagThisBlock {
 		curBytes, _ := json.Marshal(ppcCATable)
-		fmt.Println("persist ppccatable")
-		fmt.Println(string(curBytes))
 		statedb.SetCode(txfilter.PPCCATableAccount, curBytes)
 	}
 
@@ -221,15 +197,11 @@ func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConf
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
 	if doFilterFlag {
-		fmt.Println("---------ppccatable.ChangedFlagThisBlock=true------------")
 		ppcCATable.ChangedFlagThisBlock = true
-		fmt.Println("---------ppccatable.ChangedFlagThisBlock=true------------")
 		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
-			fmt.Println("---------ppccatable.used=true------------")
 			ppcCATableItem := ppcCATable.PPCCATableItemMap[msg.From()]
 			ppcCATableItem.Used = true
 			ppcCATable.PPCCATableItemMap[msg.From()] = ppcCATableItem
-			fmt.Println("---------ppccatable.used=true------------")
 		}
 	}
 
@@ -461,7 +433,6 @@ func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byt
 	if txfilter.IsBigGuy(from) && txfilter.IsPPCCATableAccount(to) {
 		_, err := txfilter.PPCUnMarshalTxData(txDataBytes)
 		if err != nil {
-			fmt.Println(err)
 			return err
 		}
 	} else if txfilter.IsLockTx(to) {
@@ -501,7 +472,6 @@ func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byt
 		if err != nil {
 			return err
 		}
-		fmt.Println(subFrom)
 
 		//allow bigger nonce come in
 		nonce := statedb.GetNonce(subFrom)
