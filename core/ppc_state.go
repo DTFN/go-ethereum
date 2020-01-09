@@ -39,15 +39,23 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 	}
 
+	ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
+	if len(ppcTableBytes) != 0 {
+		json.Unmarshal(ppcTableBytes, &ppcCATable)
+	} else {
+		ppcTableBytes, _ = json.Marshal(ppcCATable)
+	}
+	statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
+
 	if msg.To() == nil {
 	} else {
 		//bigguy may as relayyer and send bet-tx and deploy-contract
 		//This is a bet-tx maybe sent by anyone
 		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
 			//Init ppcCaTable
-			ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
-			json.Unmarshal(ppcTableBytes, &ppcCATable)
-			statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
+			//ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
+			//json.Unmarshal(ppcTableBytes, &ppcCATable)
+			//statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 			//msg.From must equals Permissoned_address
 			value, isExisted := ppcCATable.PPCCATableItemMap[msg.From()]
 			if isExisted {
@@ -98,13 +106,13 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			//Init ppcCaTable
 			msg, _ = tx.AsMessageWithPPCFrom(from)
 			msgData := string(msg.Data())
-			ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
-			if len(ppcTableBytes) != 0 {
-				json.Unmarshal(ppcTableBytes, &ppcCATable)
-			} else {
-				ppcTableBytes, _ = json.Marshal(ppcCATable)
-			}
-			statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
+			//ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
+			//if len(ppcTableBytes) != 0 {
+			//	json.Unmarshal(ppcTableBytes, &ppcCATable)
+			//} else {
+			//	ppcTableBytes, _ = json.Marshal(ppcCATable)
+			//}
+			//statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 			//manage PPCCATable by bigguy
 			ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
 			fmt.Println("---------------print data-----------------")
@@ -148,10 +156,10 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 					msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.PermissonedAddress, txfilter.SendToUnlock)
 				}
 			}
-			txfilter.PPCCATableCopy = &ppcCATable
 		}
 		//This is a mint-tx sent by bigguy
 		if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
+			msg, _ = tx.AsMessageWithPPCFrom(from)
 			mintData := string(msg.Data())
 			mintGasNumber, mintFlag = new(big.Int).SetString(mintData, 10)
 		}
@@ -159,6 +167,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 
 	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable, kickoutFlag)
 
+	txfilter.PPCCATableCopy = &ppcCATable
 	//persist ppcCaTable
 	if ppcCATable.ChangedFlagThisBlock {
 		curBytes, _ := json.Marshal(ppcCATable)
@@ -212,10 +221,15 @@ func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConf
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
 	if doFilterFlag {
+		fmt.Println("---------ppccatable.ChangedFlagThisBlock=true------------")
 		ppcCATable.ChangedFlagThisBlock = true
+		fmt.Println("---------ppccatable.ChangedFlagThisBlock=true------------")
 		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
+			fmt.Println("---------ppccatable.used=true------------")
 			ppcCATableItem := ppcCATable.PPCCATableItemMap[msg.From()]
 			ppcCATableItem.Used = true
+			ppcCATable.PPCCATableItemMap[msg.From()] = ppcCATableItem
+			fmt.Println("---------ppccatable.used=true------------")
 		}
 	}
 
