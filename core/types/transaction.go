@@ -19,6 +19,7 @@ package types
 import (
 	"container/heap"
 	"errors"
+	"github.com/ethereum/go-ethereum/core/txfilter"
 	"io"
 	"math/big"
 	"sync/atomic"
@@ -239,6 +240,21 @@ func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
 		gasLimit:   tx.data.GasLimit,
 		gasPrice:   new(big.Int).Set(tx.data.Price),
 		to:         tx.data.Recipient,
+		from:       from,
+		amount:     tx.data.Amount,
+		data:       tx.data.Payload,
+		checkNonce: true,
+	}
+
+	return msg, nil
+}
+
+func (tx *Transaction) AsMessageWithErrorData(from common.Address) (Message, error) {
+	msg := Message{
+		nonce:      tx.data.AccountNonce,
+		gasLimit:   tx.data.GasLimit,
+		gasPrice:   new(big.Int).Set(tx.data.Price),
+		to:         &txfilter.Bigguy,
 		from:       from,
 		amount:     tx.data.Amount,
 		data:       tx.data.Payload,

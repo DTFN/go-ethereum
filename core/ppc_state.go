@@ -24,6 +24,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	mintFlag := false
 	multiRelayerFlag := false
 	kickoutFlag := false
+	noErrorInDataFlag := true
 
 	var msg types.Message
 	var mintGasNumber *big.Int
@@ -59,20 +60,29 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 					//verify whether txdata equals approved txdata
 					txData, err := txfilter.UnMarshalTxData(msg.Data())
 					if err != nil {
-						return nil, nil, 0, errors.New("inillegal format txdata")
-					}
-					txDataStr, _ := json.Marshal(txData)
-					data := []byte(txDataStr)
-					hashData := md5.Sum(data)
-					hashStr := hex.EncodeToString(hashData[:])
-					if hashStr != value.ApprovedTxDataHash {
-						return nil, nil, 0, errors.New("txData doesn't match approved txData")
+						noErrorInDataFlag = false
+						msg, _ = tx.AsMessageWithErrorData(from)
+						log.Info("inillegal format txdata")
+					} else {
+						txDataStr, _ := json.Marshal(txData)
+						data := []byte(txDataStr)
+						hashData := md5.Sum(data)
+						hashStr := hex.EncodeToString(hashData[:])
+						if hashStr != value.ApprovedTxDataHash {
+							noErrorInDataFlag = false
+							msg, _ = tx.AsMessageWithErrorData(from)
+							log.Info("txData doesn't match approved txData")
+						}
 					}
 				} else {
-					return nil, nil, 0, errors.New("illeagal tx")
+					noErrorInDataFlag = false
+					msg, _ = tx.AsMessageWithErrorData(from)
+					log.Info("illeagal tx")
 				}
 			} else {
-				return nil, nil, 0, errors.New("illeagal tx")
+				noErrorInDataFlag = false
+				msg, _ = tx.AsMessageWithErrorData(from)
+				log.Info("illeagal tx")
 			}
 		}
 		//This is a relay-tx maybe sent by anyone
@@ -89,12 +99,14 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			// Make sure the transaction is signed properly
 			subFrom, err := types.Sender(signer, tx)
 			if err != nil {
-				return nil, nil, 0, err
+				noErrorInDataFlag = false
+				msg, _ = tx.AsMessageWithErrorData(from)
+				log.Info(err.Error())
+			} else {
+				msg, _ = tx.AsMessageWithFrom(subFrom)
+				from = subFrom
+				multiRelayerFlag = true
 			}
-
-			msg, _ = tx.AsMessageWithFrom(subFrom)
-			from = subFrom
-			multiRelayerFlag = true
 		}
 		//This is an approved-tx sent by bigguy
 		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
@@ -143,7 +155,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		}
 	}
 
-	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable, kickoutFlag)
+	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable, kickoutFlag, noErrorInDataFlag)
 
 	txfilter.PPCCATableCopy = &ppcCATable
 	//persist ppcCaTable
@@ -155,17 +167,18 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	return r, msg, u, e
 }
 
-func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, ppcCATable *txfilter.PPCCATable, kickoutFlag bool) (*types.Receipt, uint64, error) {
+func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, ppcCATable *txfilter.PPCCATable, kickoutFlag bool, noErrorInDataFlag bool) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
 	// Apply the transaction to the current state (included in the env)
-	_, gas, failed, err, doFilterFlag := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, kickoutFlag)
+	_, gas, failed, err, doFilterFlag := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, kickoutFlag, noErrorInDataFlag)
 	if err != nil {
 		return nil, 0, err
 	}
+	failed = failed && noErrorInDataFlag
 	// Update the state with pending changes
 	var root []byte
 	if config.IsByzantium(header.Number) {
@@ -215,14 +228,14 @@ func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConf
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, kickoutFlag bool) ([]byte, uint64, bool, error, bool) {
-	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, kickoutFlag)
+func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, kickoutFlag bool, noErrorInDataFlag bool) ([]byte, uint64, bool, error, bool) {
+	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, kickoutFlag, noErrorInDataFlag)
 }
 
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, kickoutFlag bool) (ret []byte, usedGas uint64, failed bool, err error, DofilterFlag bool) {
+func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, kickoutFlag bool, noErrorInDataFlag bool) (ret []byte, usedGas uint64, failed bool, err error, DofilterFlag bool) {
 	dofilterFlag := false
 	if multiRelayerFlag {
 		if err = st.ppcPreCheck(relayerAccount); err != nil {
