@@ -9,15 +9,16 @@ import (
 )
 
 var (
-	MintGasAccount               = common.HexToAddress("0x1111111111111111111111111111111111111111")
-	PPCCATableAccount            = common.HexToAddress("0x2222222222222222222222222222222222222222")
-	RelayAccount                 = common.HexToAddress("0x3333333333333333333333333333333333333333")
+	MintGasAccount    = common.HexToAddress("0x1111111111111111111111111111111111111111")
+	PPCCATableAccount = common.HexToAddress("0x2222222222222222222222222222222222222222")
+	RelayAccount      = common.HexToAddress("0x3333333333333333333333333333333333333333")
 )
 
 var (
 	PPCCATableCopy *PPCCATable
 	UpgradeHeight  int64
 	Bigguy         common.Address
+	PPCTXCached    *PPCCachedTx
 )
 
 func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {

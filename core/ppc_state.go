@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -87,9 +88,24 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		}
 		//This is a relay-tx maybe sent by anyone
 		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAccount.Bytes()) {
+			txfilter.PPCTXCached.Mtx.Lock()
+			defer txfilter.PPCTXCached.Mtx.Unlock()
+
 			relayerAccount = msg.From()
 			originHash = tx.Hash()
 			tx, _ = PPCDecodeTx(msg.Data())
+
+			data := msg.Data()
+			hashData := md5.Sum(data)
+			hashStr := hex.EncodeToString(hashData[:])
+			_, ok := txfilter.PPCTXCached.CachedTx[hashStr]
+			if ok {
+				subFrom := txfilter.PPCTXCached.CachedTx[hashStr]
+				fmt.Println("----------SUBFROM--------------")
+				fmt.Println(subFrom.String())
+				fmt.Println("existed")
+				fmt.Println("-----------SUBFROM-------------")
+			}
 
 			var signer types.Signer = types.HomesteadSigner{}
 			if tx.Protected() {
@@ -107,6 +123,14 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				from = subFrom
 				multiRelayerFlag = true
 			}
+
+			nonce := statedb.GetNonce(subFrom)
+			fmt.Println("----------relayMsg.Data---------------")
+			fmt.Println(hashStr)
+			fmt.Println(nonce)
+			fmt.Println(subFrom.String())
+			fmt.Println("----------relayMsg.Data---------------")
+
 		}
 		//This is an approved-tx sent by bigguy
 		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
