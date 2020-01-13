@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -93,27 +92,26 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 
 			relayerAccount = msg.From()
 			originHash = tx.Hash()
-			tx, _ = PPCDecodeTx(msg.Data())
 
+			var err error
+			var subFrom common.Address
+
+			tx, _ = PPCDecodeTx(msg.Data())
 			data := msg.Data()
 			hashData := md5.Sum(data)
 			hashStr := hex.EncodeToString(hashData[:])
 			_, ok := txfilter.PPCTXCached.CachedTx[hashStr]
 			if ok {
-				subFrom := txfilter.PPCTXCached.CachedTx[hashStr]
-				fmt.Println("----------SUBFROM--------------")
-				fmt.Println(subFrom.String())
-				fmt.Println("existed")
-				fmt.Println("-----------SUBFROM-------------")
+				subFrom = txfilter.PPCTXCached.CachedTx[hashStr]
+			} else {
+				var signer types.Signer = types.HomesteadSigner{}
+				if tx.Protected() {
+					signer = types.NewEIP155Signer(tx.ChainId())
+				}
+				// Make sure the transaction is signed properly
+				subFrom, err = types.Sender(signer, tx)
 			}
 
-			var signer types.Signer = types.HomesteadSigner{}
-			if tx.Protected() {
-				signer = types.NewEIP155Signer(tx.ChainId())
-			}
-			var err error
-			// Make sure the transaction is signed properly
-			subFrom, err := types.Sender(signer, tx)
 			if err != nil {
 				noErrorInDataFlag = false
 				msg, _ = tx.AsMessageWithErrorData(from)
@@ -123,14 +121,8 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				from = subFrom
 				multiRelayerFlag = true
 			}
-
-			nonce := statedb.GetNonce(subFrom)
-			fmt.Println("----------relayMsg.Data---------------")
-			fmt.Println(hashStr)
-			fmt.Println(nonce)
-			fmt.Println(subFrom.String())
-			fmt.Println("----------relayMsg.Data---------------")
-
+			//finally we will remove the data
+			delete(txfilter.PPCTXCached.CachedTx, hashStr)
 		}
 		//This is an approved-tx sent by bigguy
 		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
@@ -465,6 +457,50 @@ func PPCDecodeTx(txBytes []byte) (*types.Transaction, error) {
 	return tx, nil
 }
 
+func PPCIllegalRelayFrom(from, to common.Address, balance *big.Int, txDataBytes []byte, statedb *state.StateDB) (bool, error) {
+	txfilter.PPCTXCached.Mtx.Lock()
+	defer txfilter.PPCTXCached.Mtx.Unlock()
+
+	//relayTx is a flag whether the tx is relay
+	relayTx := false
+	var err error
+	var subFrom common.Address
+	tx, _ := PPCDecodeTx(txDataBytes)
+	var hashStr string
+
+	if txfilter.IsRelayAccount(to) {
+		relayTx = true
+
+		data := txDataBytes
+		hashData := md5.Sum(data)
+		hashStr = hex.EncodeToString(hashData[:])
+		_, ok := txfilter.PPCTXCached.CachedTx[hashStr]
+		if ok {
+			subFrom = txfilter.PPCTXCached.CachedTx[hashStr]
+		} else {
+
+			var signer types.Signer = types.HomesteadSigner{}
+			if tx.Protected() {
+				signer = types.NewEIP155Signer(tx.ChainId())
+			}
+			// Make sure the transaction is signed properly
+			subFrom, err = types.Sender(signer, tx)
+
+			if err != nil {
+				return relayTx, err
+			}
+		}
+		//allow bigger nonce come in
+		nonce := statedb.GetNonce(subFrom)
+		if nonce > tx.Nonce() {
+			return relayTx, ErrNonceTooLow
+		}
+
+		txfilter.PPCTXCached.CachedTx[hashStr] = subFrom
+	}
+	return relayTx, nil
+}
+
 func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byte, currHeight uint64, statedb *state.StateDB) (err error) {
 	//verify whether the ppc-approved data is valid
 	if txfilter.IsBigGuy(from) && txfilter.IsPPCCATableAccount(to) {
@@ -495,25 +531,6 @@ func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byt
 			}
 		} else {
 			return errors.New("bet tx doesn't exist in the ppccatable")
-		}
-	} else if txfilter.IsRelayAccount(to) {
-		tx, _ := PPCDecodeTx(txDataBytes)
-
-		var signer types.Signer = types.HomesteadSigner{}
-		if tx.Protected() {
-			signer = types.NewEIP155Signer(tx.ChainId())
-		}
-		var err error
-		// Make sure the transaction is signed properly
-		subFrom, err := types.Sender(signer, tx)
-		if err != nil {
-			return err
-		}
-
-		//allow bigger nonce come in
-		nonce := statedb.GetNonce(subFrom)
-		if nonce > tx.Nonce() {
-			return ErrNonceTooLow
 		}
 	}
 	return nil
