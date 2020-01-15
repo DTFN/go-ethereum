@@ -487,16 +487,22 @@ func PPCIllegalRelayFrom(from, to common.Address, balance *big.Int, txDataBytes 
 			subFrom, err = types.Sender(signer, tx)
 
 			if err != nil {
+				delete(txfilter.PPCTXCached.CachedTx, hashStr)
 				return relayTx, err
 			}
 		}
 		//allow bigger nonce come in
 		nonce := statedb.GetNonce(subFrom)
 		if nonce > tx.Nonce() {
+			//If hashStr existed in cachedTx, removed
+			//This may called by recheckTx
+			delete(txfilter.PPCTXCached.CachedTx, hashStr)
 			return relayTx, ErrNonceTooLow
+		} else {
+			// verified success
+			txfilter.PPCTXCached.CachedTx[hashStr] = subFrom
 		}
 
-		txfilter.PPCTXCached.CachedTx[hashStr] = subFrom
 	}
 	return relayTx, nil
 }
