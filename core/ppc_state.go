@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -458,6 +459,11 @@ func PPCDecodeTx(txBytes []byte) (*types.Transaction, error) {
 }
 
 func PPCIllegalRelayFrom(from, to common.Address, balance *big.Int, txDataBytes []byte, statedb *state.StateDB) (bool, error) {
+	fmt.Println("---------------PPCIllegalRelayFrom------------------")
+	if txfilter.PPCTXCached == nil {
+		txfilter.PPCTXCached = txfilter.NewPPCCachedTx()
+	}
+	fmt.Println("---------------PPCIllegalRelayFrom------------------")
 	txfilter.PPCTXCached.Mtx.Lock()
 	defer txfilter.PPCTXCached.Mtx.Unlock()
 
