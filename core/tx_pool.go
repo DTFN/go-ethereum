@@ -231,7 +231,7 @@ type TxPool struct {
 	blockArrive        bool //true when loop() wants to get lock
 	initTxCount        int
 	appConsumer        bool
-	pendingTxPreEvents map[common.Hash]*TxPreEvent
+	currentTxPreEvent map[common.Hash]*TxPreEvent
 
 	flowLimit     bool
 	hasCachedTxs  bool
@@ -261,7 +261,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		all:                make(map[common.Hash]*types.Transaction),
 		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
 		cachedTxs:          make(chan TxCallback, cachedTxSize),
-		pendingTxPreEvents: make(map[common.Hash]*TxPreEvent),
+		currentTxPreEvent: make(map[common.Hash]*TxPreEvent),
 		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
 		initTxCount:        0,
 		flowLimit:          false,
@@ -860,7 +860,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	pool.beats[addr] = time.Now()
 	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
 
-	txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]
+	txPreEvent, ok := pool.currentTxPreEvent[tx.Hash()]
 	if !ok {
 		txPreEvent = &TxPreEvent{}
 		txPreEvent.Result = make(chan error, 1)
@@ -976,10 +976,10 @@ func (pool *TxPool) HandleCachedTxs() {
 		// If we added a new transaction, run promotion checks and return
 		if !replace {
 			txPreEvent.Result = txCallback.result
-			pool.pendingTxPreEvents[txCallback.tx.Hash()] = txPreEvent
+			pool.currentTxPreEvent[txCallback.tx.Hash()] = txPreEvent
 			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
 			pool.promoteExecutables([]common.Address{from})
-			delete(pool.pendingTxPreEvents, txCallback.tx.Hash())
+			delete(pool.currentTxPreEvent, txCallback.tx.Hash())
 		}
 		if txPreEvent.Tx == nil { //has been put into pending
 			txCallback.result <- err
@@ -1019,13 +1019,13 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		return err
 	}
 	txPreEvent := &TxPreEvent{}
-	pool.pendingTxPreEvents[tx.Hash()] = txPreEvent
+	pool.currentTxPreEvent[tx.Hash()] = txPreEvent
 	// If we added a new transaction, run promotion checks and return
 	if !replace {
 		from, _ := types.Sender(pool.signer, tx) // already validated
 		pool.promoteExecutables([]common.Address{from})
 	}
-	delete(pool.pendingTxPreEvents, tx.Hash())
+	delete(pool.currentTxPreEvent, tx.Hash())
 	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
 		return nil
@@ -1075,12 +1075,12 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	errs := pool.addTxsLocked(txs, local)
 	results := make([]chan error, len(txs))
 	for i, tx := range txs {
-		if txPreEvent, ok := pool.pendingTxPreEvents[tx.Hash()]; ok {
+		if txPreEvent, ok := pool.currentTxPreEvent[tx.Hash()]; ok {
 			if txPreEvent.Result != nil {
 				results[i] = txPreEvent.Result
 				continue
 			}
-			delete(pool.pendingTxPreEvents, tx.Hash())
+			delete(pool.currentTxPreEvent, tx.Hash())
 
 		}
 		results[i] = make(chan error, 1)
@@ -1110,7 +1110,7 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 				from, _ := types.Sender(pool.signer, tx) // already validated
 				dirty[from] = struct{}{}
 				txPreEvent := &TxPreEvent{}
-				pool.pendingTxPreEvents[tx.Hash()] = txPreEvent
+				pool.currentTxPreEvent[tx.Hash()] = txPreEvent
 			}
 		}
 	}
@@ -1430,7 +1430,7 @@ func (pool *TxPool) demoteUnexecutables() {
 	h.Add("txPool", pool)
 	h.Add("pending", &pool.pending)
 	h.Add("all", &pool.all)
-	h.Add("pendingTxPreEvents", &pool.pendingTxPreEvents)
+	h.Add("currentTxPreEvent", &pool.currentTxPreEvent)
 	h.Add("priced", pool.priced)
 	h.Add("queue", &pool.queue)
 	h.Add("locals", pool.locals)
