@@ -18,7 +18,6 @@ var (
 	PPCCATableCopy *PPCCATable
 	UpgradeHeight  int64
 	Bigguy         common.Address
-	PPCTXCached    *PPCCachedTx
 )
 
 func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {

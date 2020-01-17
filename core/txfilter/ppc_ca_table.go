@@ -11,10 +11,6 @@ type PPCCATable struct {
 	PPCCATableItemMap    map[common.Address]PPCCATableItem `json:"ppc_ca_talbe_item_map"`
 }
 
-type PPCCachedTx struct {
-	Mtx      sync.RWMutex
-	CachedTx map[string]common.Address
-}
 
 type PPCCATableItem struct {
 	ApprovedTxDataHash string `json:"approved_tx_data_hash"`
@@ -27,11 +23,5 @@ func NewPPCCATable() PPCCATable {
 	return PPCCATable{
 		ChangedFlagThisBlock: false,
 		PPCCATableItemMap:    make(map[common.Address]PPCCATableItem),
-	}
-}
-
-func NewPPCCachedTx() *PPCCachedTx {
-	return &PPCCachedTx{
-		CachedTx: make(map[string]common.Address),
 	}
 }

@@ -656,11 +656,6 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			return err
 		}
 
-		_, err = PPCIllegalRelayFrom(from, *to, pool.currentState.GetBalance(from), tx.Data(), pool.currentState)
-		if err != nil {
-			return err
-		}
-
 		//validate ppcIsBetTx
 		err = txfilter.PPCIsBlocked(from, *to, pool.currentState.GetBalance(from), tx.Data())
 		if err != nil {
