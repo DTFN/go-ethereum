@@ -20,7 +20,7 @@ import (
 	"unsafe"
 )
 
-func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
+func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config,isRelayTx bool,subFrom common.Address) (*types.Receipt, Message, uint64, error) {
 	mintFlag := false
 	multiRelayerFlag := false
 	kickoutFlag := false
@@ -87,42 +87,13 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		}
 		//This is a relay-tx maybe sent by anyone
 		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAccount.Bytes()) {
-			txfilter.PPCTXCached.Mtx.Lock()
-			defer txfilter.PPCTXCached.Mtx.Unlock()
-
 			relayerAccount = msg.From()
 			originHash = tx.Hash()
 
-			var err error
-			var subFrom common.Address
-
 			tx, _ = PPCDecodeTx(msg.Data())
-			data := msg.Data()
-			hashData := md5.Sum(data)
-			hashStr := hex.EncodeToString(hashData[:])
-			_, ok := txfilter.PPCTXCached.CachedTx[hashStr]
-			if ok {
-				subFrom = txfilter.PPCTXCached.CachedTx[hashStr]
-			} else {
-				var signer types.Signer = types.HomesteadSigner{}
-				if tx.Protected() {
-					signer = types.NewEIP155Signer(tx.ChainId())
-				}
-				// Make sure the transaction is signed properly
-				subFrom, err = types.Sender(signer, tx)
-			}
-
-			if err != nil {
-				noErrorInDataFlag = false
-				msg, _ = tx.AsMessageWithErrorData(from)
-				log.Info(err.Error())
-			} else {
-				msg, _ = tx.AsMessageWithFrom(subFrom)
-				from = subFrom
-				multiRelayerFlag = true
-			}
-			//finally we will remove the data
-			delete(txfilter.PPCTXCached.CachedTx, hashStr)
+			msg, _ = tx.AsMessageWithPPCFrom(subFrom)
+			from = subFrom
+			multiRelayerFlag = isRelayTx
 		}
 		//This is an approved-tx sent by bigguy
 		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
