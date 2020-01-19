@@ -263,6 +263,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		chainHeadCh:       make(chan ChainHeadEvent, chainHeadChanSize),
 		cachedTxs:         make(chan TxCallback, cachedTxSize),
 		currentTxPreEvent: make(map[common.Hash]*TxPreEvent),
+		nestedTxs:         make(map[common.Hash]*TxPreEvent),
 		gasPrice:          new(big.Int).SetUint64(config.PriceLimit),
 		initTxCount:       0,
 		flowLimit:         false,
@@ -890,7 +891,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 		}
 	} else {
 		subNonce := txPreEvent.SubTx.Nonce()
-		if pool.currentState.GetNonce(txPreEvent.SubFrom)+1 != subNonce {
+		if pool.currentState.GetNonce(txPreEvent.SubFrom) != subNonce {
 			fmt.Printf("sub nonce %v not strictly increasing, expect %v \n", subNonce, pool.currentState.GetNonce(txPreEvent.SubFrom)+1)
 			return
 		}
