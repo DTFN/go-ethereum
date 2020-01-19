@@ -23,9 +23,11 @@ import (
 
 // TxPreEvent is posted when a transaction enters the transaction pool.
 type TxPreEvent struct {
-	Tx     *types.Transaction
-	From   common.Address
-	Result chan error
+	Tx      *types.Transaction
+	From    common.Address
+	SubTx   *types.Transaction //empty if is not a nested transaction
+	SubFrom common.Address     //empty if is not a nested transaction
+	Result  chan error
 }
 
 // PendingLogsEvent is posted pre mining and notifies of pending logs.

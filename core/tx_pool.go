@@ -113,7 +113,7 @@ var (
 type TxStatus uint
 
 const (
-	TxStatusUnknown TxStatus = iota
+	TxStatusUnknown  TxStatus = iota
 	TxStatusQueued
 	TxStatusPending
 	TxStatusIncluded
@@ -228,10 +228,11 @@ type TxPool struct {
 	all     map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced  *txPricedList                      // All transactions sorted by price
 
-	blockArrive        bool //true when loop() wants to get lock
-	initTxCount        int
-	appConsumer        bool
+	blockArrive       bool //true when loop() wants to get lock
+	initTxCount       int
+	appConsumer       bool
 	currentTxPreEvent map[common.Hash]*TxPreEvent
+	nestedTxs         map[common.Hash]*TxPreEvent
 
 	flowLimit     bool
 	hasCachedTxs  bool
@@ -251,22 +252,22 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-		config:             config,
-		chainconfig:        chainconfig,
-		chain:              chain,
-		signer:             types.NewEIP155Signer(chainconfig.ChainId),
-		pending:            make(map[common.Address]*txList),
-		queue:              make(map[common.Address]*txList),
-		beats:              make(map[common.Address]time.Time),
-		all:                make(map[common.Hash]*types.Transaction),
-		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
-		cachedTxs:          make(chan TxCallback, cachedTxSize),
+		config:            config,
+		chainconfig:       chainconfig,
+		chain:             chain,
+		signer:            types.NewEIP155Signer(chainconfig.ChainId),
+		pending:           make(map[common.Address]*txList),
+		queue:             make(map[common.Address]*txList),
+		beats:             make(map[common.Address]time.Time),
+		all:               make(map[common.Hash]*types.Transaction),
+		chainHeadCh:       make(chan ChainHeadEvent, chainHeadChanSize),
+		cachedTxs:         make(chan TxCallback, cachedTxSize),
 		currentTxPreEvent: make(map[common.Hash]*TxPreEvent),
-		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
-		initTxCount:        0,
-		flowLimit:          false,
-		appConsumer:        false,
-		hasCachedTxs:       false,
+		gasPrice:          new(big.Int).SetUint64(config.PriceLimit),
+		initTxCount:       0,
+		flowLimit:         false,
+		appConsumer:       false,
+		hasCachedTxs:      false,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
@@ -643,8 +644,23 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrInvalidSender
 	}
 	to := tx.To()
+	var subFrom common.Address
+	var subTx *types.Transaction
 	if to == nil {
 		to = &common.Address{}
+	} else if txfilter.IsRelayAccount(*to) {
+		subTx, err = types.DecodeTx(tx.Data())
+		if err != nil {
+			return err
+		}
+		subFrom, err = types.Sender(pool.signer, subTx)
+		if err != nil {
+			return err
+		}
+
+		if pool.currentState.GetNonce(subFrom) > subTx.Nonce() {
+			return ErrNonceTooLow
+		}
 	}
 
 	// pool.chain.CurrentBlock.Number.Int64()+1 = nextBlock Number
@@ -689,8 +705,13 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if tx.Gas() < intrGas {
 		return ErrIntrinsicGas
 	}
+	txPreEvent := &TxPreEvent{SubTx: subTx, SubFrom: subFrom} //Tx and From are assigned in promoteTx()
+	if subTx != nil {
+		pool.nestedTxs[tx.Hash()] = txPreEvent
+	}
 	return nil
 }
+
 func (pool *TxPool) ValidateExist(hash common.Hash) bool {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
@@ -751,6 +772,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		// New transaction is better, replace old one
 		if old != nil {
 			delete(pool.all, old.Hash())
+			delete(pool.nestedTxs, old.Hash())
 			pool.priced.Removed()
 			pendingReplaceCounter.Inc(1)
 		}
@@ -798,6 +820,7 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, er
 	// Discard any previous transaction and mark this
 	if old != nil {
 		delete(pool.all, old.Hash())
+		delete(pool.nestedTxs, old.Hash())
 		pool.priced.Removed()
 		queuedReplaceCounter.Inc(1)
 	}
@@ -834,6 +857,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	if !inserted {
 		// An older transaction was better, discard this
 		delete(pool.all, hash)
+		delete(pool.nestedTxs, hash)
 		pool.priced.Removed()
 
 		pendingDiscardCounter.Inc(1)
@@ -842,6 +866,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	// Otherwise discard any previous transaction and mark this
 	if old != nil {
 		delete(pool.all, old.Hash())
+		delete(pool.nestedTxs, old.Hash())
 		pool.priced.Removed()
 
 		pendingReplaceCounter.Inc(1)
@@ -853,18 +878,35 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	}
 	// Set the potentially new pending nonce and notify any subsystems of the new tx
 	pool.beats[addr] = time.Now()
-	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
-
-	txPreEvent, ok := pool.currentTxPreEvent[tx.Hash()]
-	if !ok {
-		txPreEvent = &TxPreEvent{}
-		txPreEvent.Result = make(chan error, 1)
+	txPreEvent, isRelayTx := pool.nestedTxs[tx.Hash()]
+	if !isRelayTx {
+		var ok bool
+		txPreEvent, ok = pool.currentTxPreEvent[tx.Hash()]
+		if !ok {
+			txPreEvent = &TxPreEvent{}
+			txPreEvent.Result = make(chan error, 1)
+		} else if txPreEvent.Result == nil {
+			txPreEvent.Result = make(chan error, 1)
+		}
 	} else if txPreEvent.Result == nil {
 		txPreEvent.Result = make(chan error, 1)
 	}
+	if isRelayTx {
+		subNonce := txPreEvent.SubTx.Nonce()
+		if pool.currentState.GetNonce(txPreEvent.SubFrom)+1 != subNonce {
+			fmt.Printf("sub nonce %v not strictly increasing, expect %v \n", subNonce, pool.currentState.GetNonce(txPreEvent.SubFrom)+1)
+			return
+		}
+		pool.pendingState.SetNonce(txPreEvent.SubFrom, subNonce+1)
+		if txPreEvent.Result == nil {
+			txPreEvent.Result = make(chan error, 1)
+		}
+	}
+
+	pool.pendingState.SetNonce(addr, tx.Nonce()+1)
+
 	txPreEvent.From = addr
 	txPreEvent.Tx = tx
-
 	pool.txFeed.Send(*txPreEvent) //leilei delete go routine call for ethermint checkTx
 }
 
@@ -971,10 +1013,8 @@ func (pool *TxPool) HandleCachedTxs() {
 		// If we added a new transaction, run promotion checks and return
 		if !replace {
 			txPreEvent.Result = txCallback.result
-			pool.currentTxPreEvent[txCallback.tx.Hash()] = txPreEvent
 			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
 			pool.promoteExecutables([]common.Address{from})
-			delete(pool.currentTxPreEvent, txCallback.tx.Hash())
 		}
 		if txPreEvent.Tx == nil { //has been put into pending
 			txCallback.result <- err
@@ -1013,14 +1053,24 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 		pool.mu.Unlock()
 		return err
 	}
-	txPreEvent := &TxPreEvent{}
-	pool.currentTxPreEvent[tx.Hash()] = txPreEvent
+	var txPreEvent *TxPreEvent
+	if tx.To() != nil && txfilter.IsRelayAccount(*tx.To()) {
+		var ok bool
+		txPreEvent, ok = pool.nestedTxs[tx.Hash()]
+		if !ok {
+			panic(fmt.Sprintf("tx %X not exist in pool.nestedTxs", tx.Hash()))
+		}
+	} else {
+		txPreEvent = &TxPreEvent{}
+	}
+
 	// If we added a new transaction, run promotion checks and return
 	if !replace {
+		pool.currentTxPreEvent[tx.Hash()] = txPreEvent
 		from, _ := types.Sender(pool.signer, tx) // already validated
 		pool.promoteExecutables([]common.Address{from})
+		delete(pool.currentTxPreEvent, tx.Hash())
 	}
-	delete(pool.currentTxPreEvent, tx.Hash())
 	if txPreEvent.Result == nil { //put into queue but not into pending
 		pool.mu.Unlock()
 		return nil
@@ -1104,7 +1154,16 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 			if !replace {
 				from, _ := types.Sender(pool.signer, tx) // already validated
 				dirty[from] = struct{}{}
-				txPreEvent := &TxPreEvent{}
+				var txPreEvent *TxPreEvent
+				if tx.To() != nil && txfilter.IsRelayAccount(*tx.To()) {
+					var ok bool
+					txPreEvent, ok = pool.nestedTxs[tx.Hash()]
+					if !ok {
+						panic(fmt.Sprintf("tx %X not exist in pool.nestedTxs", tx.Hash()))
+					}
+				} else {
+					txPreEvent = &TxPreEvent{}
+				}
 				pool.currentTxPreEvent[tx.Hash()] = txPreEvent
 			}
 		}
@@ -1162,6 +1221,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 
 	// Remove it from the list of known transactions
 	delete(pool.all, hash)
+	delete(pool.nestedTxs, hash)
 	if outofbound {
 		pool.priced.Removed()
 	}
@@ -1389,6 +1449,7 @@ func (pool *TxPool) demoteUnexecutables() {
 			hash := tx.Hash()
 			log.Trace("Removed old pending transaction", "hash", hash)
 			delete(pool.all, hash)
+			delete(pool.nestedTxs, tx.Hash())
 			pool.priced.Removed()
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
@@ -1397,6 +1458,7 @@ func (pool *TxPool) demoteUnexecutables() {
 			hash := tx.Hash()
 			log.Trace("Removed unpayable pending transaction", "hash", hash)
 			delete(pool.all, hash)
+			delete(pool.nestedTxs, tx.Hash())
 			pool.priced.Removed()
 			pendingNofundsCounter.Inc(1)
 		}

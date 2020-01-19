@@ -14,13 +14,12 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 	"reflect"
 	"unsafe"
 )
 
-func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config, isRelayTx bool, subFrom common.Address) (*types.Receipt, Message, uint64, error) {
+func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config, subTx *types.Transaction, subFrom common.Address) (*types.Receipt, Message, uint64, error) {
 	mintFlag := false
 	multiRelayerFlag := false
 	kickoutFlag := false
@@ -37,7 +36,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		msg, _ = tx.AsMessageWithFrom(from)
 	} else {
 		//ignore tx.data.amout to forbid eth-transfer-tx
-		msg, _ = tx.AsMessageWithPPCFrom(from)
+		msg, _ = tx.AsMessageWithFrom(from)
 	}
 
 	ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
@@ -92,15 +91,15 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			originHash = tx.Hash()
 			relayNonce = tx.Nonce()
 
-			tx, _ = PPCDecodeTx(msg.Data())
-			msg, _ = tx.AsMessageWithPPCFrom(subFrom)
+			tx, _ = types.DecodeTx(msg.Data())
+			msg, _ = tx.AsMessageWithFrom(subFrom)
 			from = subFrom
 			multiRelayerFlag = isRelayTx
 		}
 		//This is an approved-tx sent by bigguy
 		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
 			//Init ppcCaTable
-			msg, _ = tx.AsMessageWithPPCFrom(from)
+			msg, _ = tx.AsMessageWithFrom(from)
 			msgData := string(msg.Data())
 			//manage PPCCATable by bigguy
 			ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
@@ -126,19 +125,19 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 					ppcCATable.ChangedFlagThisBlock = true
 					delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
 				}
-			case "kickout":
-				{
-					//directly remove user in pos_table by bigguy
-					ppcCATable.ChangedFlagThisBlock = true
-					kickoutFlag = true
-					delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
-					msg, _ = tx.AsMessageWithKickoutFrom(ppcTxData.PermissonedAddress, txfilter.SendToUnlock)
-				}
 			}
 		}
-		//This is a mint-tx sent by bigguy
+		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.SendToUnlock.Bytes()) {
+			//directly remove user in pos_table by bigguy
+			ppcCATable.ChangedFlagThisBlock = true
+			kickoutFlag = true
+			delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
+			msg, _ = tx.AsMessageWithFrom(ppcTxData.PermissonedAddress)
+
+		}
+			//This is a mint-tx sent by bigguy
 		if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
-			msg, _ = tx.AsMessageWithPPCFrom(from)
+			msg, _ = tx.AsMessageWithFrom(from)
 			mintData := string(msg.Data())
 			mintGasNumber, mintFlag = new(big.Int).SetString(mintData, 10)
 		}
@@ -425,16 +424,6 @@ func BytesToString(b []byte) string {
 	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 	sh := reflect.StringHeader{bh.Data, bh.Len}
 	return *(*string)(unsafe.Pointer(&sh))
-}
-
-// rlp decode an etherum transaction
-func PPCDecodeTx(txBytes []byte) (*types.Transaction, error) {
-	tx := new(types.Transaction)
-	rlpStream := rlp.NewStream(bytes.NewBuffer(txBytes), 0)
-	if err := tx.DecodeRLP(rlpStream); err != nil {
-		return nil, err
-	}
-	return tx, nil
 }
 
 //func PPCIllegalRelayFrom(from, to common.Address, balance *big.Int, txDataBytes []byte, statedb *state.StateDB) (bool, error) {

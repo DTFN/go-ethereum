@@ -5,7 +5,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	tmTypes "github.com/tendermint/tendermint/types"
 	"math/big"
-	"strings"
+	"bytes"
 )
 
 var (
@@ -245,13 +245,13 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 }
 
 func IsBigGuy(from common.Address) bool {
-	return strings.EqualFold(from.String(), Bigguy.String())
+	return bytes.Equal(from.Bytes(), Bigguy.Bytes())
 }
 
 func IsPPCCATableAccount(to common.Address) bool {
-	return strings.EqualFold(to.String(), PPCCATableAccount.String())
+	return bytes.Equal(to.Bytes(), PPCCATableAccount.Bytes())
 }
 
 func IsRelayAccount(to common.Address) bool {
-	return strings.EqualFold(to.String(), RelayAccount.String())
+	return bytes.Equal(to.Bytes(), RelayAccount.Bytes())
 }
