@@ -888,10 +888,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 		} else if txPreEvent.Result == nil {
 			txPreEvent.Result = make(chan error, 1)
 		}
-	} else if txPreEvent.Result == nil {
-		txPreEvent.Result = make(chan error, 1)
-	}
-	if isRelayTx {
+	} else {
 		subNonce := txPreEvent.SubTx.Nonce()
 		if pool.currentState.GetNonce(txPreEvent.SubFrom)+1 != subNonce {
 			fmt.Printf("sub nonce %v not strictly increasing, expect %v \n", subNonce, pool.currentState.GetNonce(txPreEvent.SubFrom)+1)
