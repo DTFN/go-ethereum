@@ -1,6 +1,7 @@
 package txfilter
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	tmTypes "github.com/tendermint/tendermint/types"
@@ -254,5 +255,5 @@ func IsPPCCATableAccount(to common.Address) bool {
 }
 
 func IsRelayAccount(to common.Address) bool {
-	return strings.EqualFold(to.String(), RelayAccount.String())
+	return bytes.Equal(to.Bytes(), NewRelayAddress.Bytes())
 }

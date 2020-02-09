@@ -20,7 +20,7 @@ import (
 	"unsafe"
 )
 
-func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config, isRelayTx bool, subFrom common.Address) (*types.Receipt, Message, uint64, error) {
+func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config, isRelayTx bool, relayFrom common.Address) (*types.Receipt, Message, uint64, error) {
 	mintFlag := false
 	multiRelayerFlag := false
 	kickoutFlag := false
@@ -87,24 +87,14 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			}
 		}
 		if bytes.Equal(msg.To().Bytes(), txfilter.NewRelayAddress.Bytes()) {
-			statedb.AddBalance(msg.From(), big.NewInt(1000000000000000000))
 			relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
 			if err == nil {
 				encodeBytes, _ := hex.DecodeString(relayTxData.EncodeData[2:])
 				contractAddress := common.HexToAddress(relayTxData.ContractAddress)
 				msg, _ = tx.AsMessageWithRelay(from,encodeBytes,contractAddress)
+				multiRelayerFlag = true
+				relayerAccount = relayFrom
 			}
-		}
-		//This is a relay-tx maybe sent by anyone
-		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAccount.Bytes()) {
-			relayerAccount = msg.From()
-			originHash = tx.Hash()
-			relayNonce = tx.Nonce()
-
-			tx, _ = PPCDecodeTx(msg.Data())
-			msg, _ = tx.AsMessageWithPPCFrom(subFrom)
-			from = subFrom
-			multiRelayerFlag = isRelayTx
 		}
 		//This is an approved-tx sent by bigguy
 		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
@@ -189,22 +179,14 @@ func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConf
 	// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
 	// based on the eip phase, we're passing wether the root touch-delete accounts.
 	receipt := types.NewReceipt(root, failed, *usedGas)
-	if multiRelayerFlag {
-		receipt.TxHash = originHash
-	} else {
-		receipt.TxHash = tx.Hash()
-	}
+	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = gas
 	// if the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, tx.Nonce())
 	}
 	// Set the receipt logs and create a bloom for filtering
-	if multiRelayerFlag {
-		receipt.Logs = statedb.GetLogs(originHash)
-	} else {
-		receipt.Logs = statedb.GetLogs(tx.Hash())
-	}
+	receipt.Logs = statedb.GetLogs(tx.Hash())
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
 	if doFilterFlag {
@@ -278,9 +260,6 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			} else {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 				//wenbin add,support multi-tx nonce
-				if multiRelayerFlag {
-					st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
-				}
 			}
 		} else {
 			// Increment the nonce for the next transaction
@@ -290,9 +269,6 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 				st.state.SetNonce(txfilter.Bigguy, st.state.GetNonce(txfilter.Bigguy)+1)
 			}
 			//wenbin add,support multi-tx nonce
-			if multiRelayerFlag {
-				st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
-			}
 
 			isBetTx, vmerr := txfilter.PPCDoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil && !isBetTx {
@@ -308,11 +284,6 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 			} else {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-
-				//wenbin add,support multi-tx nonce
-				if multiRelayerFlag {
-					st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
-				}
 			}
 		} else {
 			// Increment the nonce for the next transaction
@@ -320,11 +291,6 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			} else {
 				st.state.SetNonce(txfilter.Bigguy, st.state.GetNonce(txfilter.Bigguy)+1)
-			}
-
-			//wenbin add,support multi-tx nonce
-			if multiRelayerFlag {
-				st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
 			}
 
 			isBetTx := false
