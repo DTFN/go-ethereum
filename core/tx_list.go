@@ -17,7 +17,9 @@
 package core
 
 import (
+	"bytes"
 	"container/heap"
+	"github.com/ethereum/go-ethereum/core/txfilter"
 	"math"
 	"math/big"
 	"sort"
@@ -312,6 +314,45 @@ func (l *txList) Filter(costLimit *big.Int, gasLimit uint64) (types.Transactions
 	}
 	return removed, invalids
 }
+
+func (l *txList) Filter_relay(costLimit *big.Int, pool *TxPool, gasLimit uint64) (types.Transactions, types.Transactions) {
+	// If all transactions are below the threshold, short circuit
+	//if l.costcap.Cmp(costLimit) <= 0 && l.gascap <= gasLimit {
+	//	fmt.Println("test1.0")
+	//	return nil, nil
+	//}
+	l.costcap = new(big.Int).Set(costLimit) // Lower the caps to the thresholds
+	l.gascap = gasLimit
+
+	// Filter out all the transactions above the account's funds
+	removed := l.txs.Filter(func(tx *types.Transaction) bool {
+		if tx.To() != nil{
+			if bytes.Equal(tx.To().Bytes(),txfilter.NewRelayAddress.Bytes()){
+				relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
+				if err == nil {
+					relayerAddress := common.HexToAddress(relayTxData.RelayerAddress)
+					return tx.Cost().Cmp(pool.currentState.GetBalance(relayerAddress)) > 0 || tx.Gas() > gasLimit
+				}
+			}
+		}
+
+		return tx.Cost().Cmp(costLimit) > 0 || tx.Gas() > gasLimit })
+
+	// If the list was strict, filter anything above the lowest nonce
+	var invalids types.Transactions
+
+	if l.strict && len(removed) > 0 {
+		lowest := uint64(math.MaxUint64)
+		for _, tx := range removed {
+			if nonce := tx.Nonce(); lowest > nonce {
+				lowest = nonce
+			}
+		}
+		invalids = l.txs.Filter(func(tx *types.Transaction) bool { return tx.Nonce() > lowest })
+	}
+	return removed, invalids
+}
+
 
 // Cap places a hard limit on the number of items, returning all transactions
 // exceeding that limit.

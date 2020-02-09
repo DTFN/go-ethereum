@@ -86,6 +86,15 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				log.Info("illeagal tx")
 			}
 		}
+		if bytes.Equal(msg.To().Bytes(), txfilter.NewRelayAddress.Bytes()) {
+			statedb.AddBalance(msg.From(), big.NewInt(1000000000000000000))
+			relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
+			if err == nil {
+				encodeBytes, _ := hex.DecodeString(relayTxData.EncodeData[2:])
+				contractAddress := common.HexToAddress(relayTxData.ContractAddress)
+				msg, _ = tx.AsMessageWithRelay(from,encodeBytes,contractAddress)
+			}
+		}
 		//This is a relay-tx maybe sent by anyone
 		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAccount.Bytes()) {
 			relayerAccount = msg.From()
