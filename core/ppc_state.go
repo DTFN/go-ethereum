@@ -92,7 +92,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			}
 		}
 		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAddress.Bytes()) {
-			relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
+			relayTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
 			if err == nil {
 				fmt.Println("---------------relayTxData relayerSignedMessage-------------------")
 				fmt.Println(relayTxData.RelayerSignedMessage)

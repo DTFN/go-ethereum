@@ -22,15 +22,15 @@ func PPCUnMarshalTxData(jsonByte []byte) (PPCTx, error) {
 	return ppcdata, err
 }
 
-type RelayTxData struct {
+type ClientTxData struct {
 	RelayerAddress     string `json:"relayerAddress"`
 	EncodeData      string `json:"encodeData"`
 	ContractAddress string `json:"contractAddress"`
 	RelayerSignedMessage string `json:"relayerSignedMessage"`
 }
 
-func RelayUnMarshalTxData(jsonByte []byte) (*RelayTxData, error) {
-	d := &RelayTxData{}
+func ClientUnMarshalTxData(jsonByte []byte) (*ClientTxData, error) {
+	d := &ClientTxData{}
 	err := json.Unmarshal(jsonByte, d)
 	return d, err
 }

@@ -633,7 +633,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	balanceCheckAddress := common.Address{}
 	if tx.To() != nil {
 		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
-			originTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
+			originTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
 			if err == nil {
 				balanceCheckAddress = common.HexToAddress(originTxData.RelayerAddress)
 				relayContractTxFlag = true
@@ -672,7 +672,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	//valid signature
 	if tx.To()!= nil{
 		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
-			originTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
+			originTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
 			encodeRelayerBytes, _ := hex.DecodeString(originTxData.RelayerSignedMessage[2:])
 			relayerTx, err := PPCDecodeTx(encodeRelayerBytes)
 			if err != nil {
@@ -924,7 +924,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 
 	if tx.To() != nil {
 		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
-			relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
+			relayTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
 			if err == nil {
 				relayerAddress := common.HexToAddress(relayTxData.RelayerAddress)
 				txPreEvent.RelayAddress = relayerAddress
