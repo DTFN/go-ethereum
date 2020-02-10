@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -93,6 +94,9 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAddress.Bytes()) {
 			relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
 			if err == nil {
+				fmt.Println("---------------relayTxData relayerSignedMessage-------------------")
+				fmt.Println(relayTxData.RelayerSignedMessage)
+				fmt.Println("---------------relayTxData relayerSignedMessage-------------------")
 				encodeBytes, _ := hex.DecodeString(relayTxData.EncodeData[2:])
 				contractAddress := common.HexToAddress(relayTxData.ContractAddress)
 				msg, _ = tx.AsMessageWithRelay(from, encodeBytes, contractAddress)

@@ -26,6 +26,7 @@ type RelayTxData struct {
 	RelayerAddress     string `json:"relayerAddress"`
 	EncodeData      string `json:"encodeData"`
 	ContractAddress string `json:"contractAddress"`
+	RelayerSignedMessage string `json:"relayerSignedMessage"`
 }
 
 func RelayUnMarshalTxData(jsonByte []byte) (*RelayTxData, error) {
