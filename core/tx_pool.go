@@ -676,33 +676,40 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			encodeRelayerBytes, _ := hex.DecodeString(originTxData.RelayerSignedMessage[2:])
 			relayerTx, err := PPCDecodeTx(encodeRelayerBytes)
 			if err != nil {
+				fmt.Println("test1.0")
 				return ErrInvalidRelaySignature
 			}
 			relayerAddress, err := types.Sender(pool.signer, relayerTx)
 			if err != nil {
+				fmt.Println("test1.1")
 				return ErrInvalidRelaySignature
 			}
 			//verify the relayer address is right
 			if !bytes.Equal(relayerAddress.Bytes(),balanceCheckAddress.Bytes()){
+				fmt.Println("test1.2")
 				return ErrInvalidRelaySignature
 			}
 			//make sure the signed data is legal json
 			relayerSignedData,err := txfilter.RelayUnMarshalSignedTxData([]byte(string(relayerTx.Data())))
 			if err != nil{
+				fmt.Println("test1.3")
 				return ErrInvalidRelaySignature
 			}
 			//verify client nonce of relayer signature
 			if relayerSignedData.Nonce != tx.Nonce(){
+				fmt.Println("test1.4")
 				return ErrInvalidRelaySignature
 			}
 			//verify client address of relayer signature
 			clientAddress := common.HexToAddress(relayerSignedData.ClientAddress)
 			if bytes.Equal(clientAddress.Bytes(),from.Bytes()){
+				fmt.Println("test1.5")
 				return ErrInvalidRelaySignature
 			}
 			fmt.Println(string(relayerTx.Data()))
 		}
 	}
+	fmt.Println("success passed valida signature")
 
 	// pool.chain.CurrentBlock.Number.Int64()+1 = nextBlock Number
 	// the added tx will be used in the nextBlock
