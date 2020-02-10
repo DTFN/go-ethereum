@@ -884,7 +884,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	txPreEvent.Tx = tx
 
 	if tx.To()!= nil{
-		if bytes.Equal(tx.To().Bytes(),txfilter.NewRelayAddress.Bytes()){
+		if bytes.Equal(tx.To().Bytes(),txfilter.RelayAddress.Bytes()){
 			relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
 			if err == nil {
 				relayerAddress := common.HexToAddress(relayTxData.RelayerAddress)

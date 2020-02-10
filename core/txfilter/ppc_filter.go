@@ -12,8 +12,7 @@ import (
 var (
 	MintGasAccount    = common.HexToAddress("0x1111111111111111111111111111111111111111")
 	PPCCATableAccount = common.HexToAddress("0x2222222222222222222222222222222222222222")
-	RelayAccount      = common.HexToAddress("0x3333333333333333333333333333333333333333")
-	NewRelayAddress   = common.HexToAddress("0x2222222222222222222222222222222222222220")
+	RelayAddress   = common.HexToAddress("0x3333333333333333333333333333333333333333")
 )
 
 var (
@@ -255,5 +254,5 @@ func IsPPCCATableAccount(to common.Address) bool {
 }
 
 func IsRelayAccount(to common.Address) bool {
-	return bytes.Equal(to.Bytes(), NewRelayAddress.Bytes())
+	return bytes.Equal(to.Bytes(), RelayAddress.Bytes())
 }

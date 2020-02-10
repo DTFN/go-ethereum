@@ -327,7 +327,7 @@ func (l *txList) Filter_relay(costLimit *big.Int, pool *TxPool, gasLimit uint64)
 	// Filter out all the transactions above the account's funds
 	removed := l.txs.Filter(func(tx *types.Transaction) bool {
 		if tx.To() != nil{
-			if bytes.Equal(tx.To().Bytes(),txfilter.NewRelayAddress.Bytes()){
+			if bytes.Equal(tx.To().Bytes(),txfilter.RelayAddress.Bytes()){
 				relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
 				if err == nil {
 					relayerAddress := common.HexToAddress(relayTxData.RelayerAddress)

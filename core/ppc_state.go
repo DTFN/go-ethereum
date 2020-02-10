@@ -85,7 +85,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				log.Info("illeagal tx")
 			}
 		}
-		if bytes.Equal(msg.To().Bytes(), txfilter.NewRelayAddress.Bytes()) {
+		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAddress.Bytes()) {
 			relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
 			if err == nil {
 				encodeBytes, _ := hex.DecodeString(relayTxData.EncodeData[2:])
