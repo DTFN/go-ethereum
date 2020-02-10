@@ -670,7 +670,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 
 	//valid signature
-	if tx.To()!= nil{
+	if tx.To() != nil {
 		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
 			originTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
 			encodeRelayerBytes, _ := hex.DecodeString(originTxData.RelayerSignedMessage[2:])
@@ -685,24 +685,26 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 				return ErrInvalidRelaySignature
 			}
 			//verify the relayer address is right
-			if !bytes.Equal(relayerAddress.Bytes(),balanceCheckAddress.Bytes()){
+			if !bytes.Equal(relayerAddress.Bytes(), balanceCheckAddress.Bytes()) {
+				fmt.Println(relayerAddress.String())
+				fmt.Println(balanceCheckAddress.String())
 				fmt.Println("test1.2")
 				return ErrInvalidRelaySignature
 			}
 			//make sure the signed data is legal json
-			relayerSignedData,err := txfilter.RelayUnMarshalSignedTxData([]byte(string(relayerTx.Data())))
-			if err != nil{
+			relayerSignedData, err := txfilter.RelayUnMarshalSignedTxData([]byte(string(relayerTx.Data())))
+			if err != nil {
 				fmt.Println("test1.3")
 				return ErrInvalidRelaySignature
 			}
 			//verify client nonce of relayer signature
-			if relayerSignedData.Nonce != tx.Nonce(){
+			if relayerSignedData.Nonce != tx.Nonce() {
 				fmt.Println("test1.4")
 				return ErrInvalidRelaySignature
 			}
 			//verify client address of relayer signature
 			clientAddress := common.HexToAddress(relayerSignedData.ClientAddress)
-			if bytes.Equal(clientAddress.Bytes(),from.Bytes()){
+			if bytes.Equal(clientAddress.Bytes(), from.Bytes()) {
 				fmt.Println("test1.5")
 				return ErrInvalidRelaySignature
 			}

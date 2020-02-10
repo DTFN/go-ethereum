@@ -12,7 +12,7 @@ import (
 var (
 	MintGasAccount    = common.HexToAddress("0x1111111111111111111111111111111111111111")
 	PPCCATableAccount = common.HexToAddress("0x2222222222222222222222222222222222222222")
-	RelayAddress   = common.HexToAddress("0x3333333333333333333333333333333333333333")
+	RelayAddress      = common.HexToAddress("0x3333333333333333333333333333333333333333")
 )
 
 var (
