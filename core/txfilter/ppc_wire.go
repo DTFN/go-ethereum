@@ -34,3 +34,15 @@ func RelayUnMarshalTxData(jsonByte []byte) (*RelayTxData, error) {
 	err := json.Unmarshal(jsonByte, d)
 	return d, err
 }
+
+type RelayerSignedData struct {
+	Nonce uint64 `json:"nonce"`
+	ClientAddress string `json:"clientAddress"`
+	EncodeData string `json:"encodeData"`
+}
+
+func RelayUnMarshalSignedTxData(jsonByte []byte) (*RelayerSignedData, error) {
+	d := &RelayerSignedData{}
+	err := json.Unmarshal(jsonByte, d)
+	return d, err
+}

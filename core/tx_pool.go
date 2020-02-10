@@ -18,6 +18,7 @@ package core
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -49,6 +50,8 @@ const (
 var (
 	// ErrInvalidSender is returned if the transaction contains an invalid signature.
 	ErrInvalidSender = errors.New("invalid sender")
+
+	ErrInvalidRelaySignature = errors.New("invalid relayer signature for relaytx")
 
 	// ErrNonceTooLow is returned if the nonce of a transaction is lower than the
 	// one present in the local chain.
@@ -229,9 +232,9 @@ type TxPool struct {
 	all     map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced  *txPricedList                      // All transactions sorted by price
 
-	blockArrive        bool //true when loop() wants to get lock
-	initTxCount        int
-	appConsumer        bool
+	blockArrive       bool //true when loop() wants to get lock
+	initTxCount       int
+	appConsumer       bool
 	currentTxPreEvent map[common.Hash]*TxPreEvent
 
 	flowLimit     bool
@@ -252,22 +255,22 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-		config:             config,
-		chainconfig:        chainconfig,
-		chain:              chain,
-		signer:             types.NewEIP155Signer(chainconfig.ChainId),
-		pending:            make(map[common.Address]*txList),
-		queue:              make(map[common.Address]*txList),
-		beats:              make(map[common.Address]time.Time),
-		all:                make(map[common.Hash]*types.Transaction),
-		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
-		cachedTxs:          make(chan TxCallback, cachedTxSize),
+		config:            config,
+		chainconfig:       chainconfig,
+		chain:             chain,
+		signer:            types.NewEIP155Signer(chainconfig.ChainId),
+		pending:           make(map[common.Address]*txList),
+		queue:             make(map[common.Address]*txList),
+		beats:             make(map[common.Address]time.Time),
+		all:               make(map[common.Hash]*types.Transaction),
+		chainHeadCh:       make(chan ChainHeadEvent, chainHeadChanSize),
+		cachedTxs:         make(chan TxCallback, cachedTxSize),
 		currentTxPreEvent: make(map[common.Hash]*TxPreEvent),
-		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
-		initTxCount:        0,
-		flowLimit:          false,
-		appConsumer:        false,
-		hasCachedTxs:       false,
+		gasPrice:          new(big.Int).SetUint64(config.PriceLimit),
+		initTxCount:       0,
+		flowLimit:         false,
+		appConsumer:       false,
+		hasCachedTxs:      false,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
@@ -628,14 +631,15 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// If the transaction fails basic validation, discard it
 	relayContractTxFlag := false
 	balanceCheckAddress := common.Address{}
-	if len(tx.Data()) != 0 {
-		relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
-		if err == nil {
-			balanceCheckAddress = common.HexToAddress(relayTxData.RelayerAddress)
-			relayContractTxFlag = true;
-		}else{
+	if tx.To() != nil {
+		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
+			originTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
+			if err == nil {
+				balanceCheckAddress = common.HexToAddress(originTxData.RelayerAddress)
+				relayContractTxFlag = true
+			} else {
+			}
 		}
-	}else{
 	}
 
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
@@ -661,8 +665,43 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		to = &common.Address{}
 	}
 
-	if !relayContractTxFlag{
+	if !relayContractTxFlag {
 		balanceCheckAddress = from
+	}
+
+	//valid signature
+	if tx.To()!= nil{
+		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
+			originTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
+			encodeRelayerBytes, _ := hex.DecodeString(originTxData.RelayerSignedMessage[2:])
+			relayerTx, err := PPCDecodeTx(encodeRelayerBytes)
+			if err != nil {
+				return ErrInvalidRelaySignature
+			}
+			relayerAddress, err := types.Sender(pool.signer, relayerTx)
+			if err != nil {
+				return ErrInvalidRelaySignature
+			}
+			//verify the relayer address is right
+			if !bytes.Equal(relayerAddress.Bytes(),balanceCheckAddress.Bytes()){
+				return ErrInvalidRelaySignature
+			}
+			//make sure the signed data is legal json
+			relayerSignedData,err := txfilter.RelayUnMarshalSignedTxData([]byte(string(relayerTx.Data())))
+			if err != nil{
+				return ErrInvalidRelaySignature
+			}
+			//verify client nonce of relayer signature
+			if relayerSignedData.Nonce != tx.Nonce(){
+				return ErrInvalidRelaySignature
+			}
+			//verify client address of relayer signature
+			clientAddress := common.HexToAddress(relayerSignedData.ClientAddress)
+			if bytes.Equal(clientAddress.Bytes(),from.Bytes()){
+				return ErrInvalidRelaySignature
+			}
+			fmt.Println(string(relayerTx.Data()))
+		}
 	}
 
 	// pool.chain.CurrentBlock.Number.Int64()+1 = nextBlock Number
@@ -883,19 +922,18 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	txPreEvent.From = addr
 	txPreEvent.Tx = tx
 
-	if tx.To()!= nil{
-		if bytes.Equal(tx.To().Bytes(),txfilter.RelayAddress.Bytes()){
+	if tx.To() != nil {
+		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
 			relayTxData, err := txfilter.RelayUnMarshalTxData(tx.Data())
 			if err == nil {
 				relayerAddress := common.HexToAddress(relayTxData.RelayerAddress)
 				txPreEvent.RelayAddress = relayerAddress
 				txPreEvent.RelayTxFlag = true
 			}
-		}else{
+		} else {
 			txPreEvent.RelayTxFlag = false
 		}
 	}
-
 
 	pool.txFeed.Send(*txPreEvent) //leilei delete go routine call for ethermint checkTx
 }
