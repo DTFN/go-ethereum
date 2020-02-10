@@ -39,13 +39,18 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 	}
 
-	ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
-	if len(ppcTableBytes) != 0 {
-		json.Unmarshal(ppcTableBytes, &ppcCATable)
-	} else {
-		ppcTableBytes, _ = json.Marshal(ppcCATable)
+	if msg.To() != nil {
+		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || (bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) &&
+			bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes())) {
+			ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
+			if len(ppcTableBytes) != 0 {
+				json.Unmarshal(ppcTableBytes, &ppcCATable)
+			} else {
+				ppcTableBytes, _ = json.Marshal(ppcCATable)
+			}
+			statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
+		}
 	}
-	statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 
 	if msg.To() == nil {
 	} else {
@@ -90,7 +95,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 			if err == nil {
 				encodeBytes, _ := hex.DecodeString(relayTxData.EncodeData[2:])
 				contractAddress := common.HexToAddress(relayTxData.ContractAddress)
-				msg, _ = tx.AsMessageWithRelay(from,encodeBytes,contractAddress)
+				msg, _ = tx.AsMessageWithRelay(from, encodeBytes, contractAddress)
 				multiRelayerFlag = true
 				relayerAccount = relayFrom
 			}
@@ -144,11 +149,16 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 
 	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable, kickoutFlag, noErrorInDataFlag)
 
-	txfilter.PPCCATableCopy = &ppcCATable
-	//persist ppcCaTable
-	if ppcCATable.ChangedFlagThisBlock {
-		curBytes, _ := json.Marshal(ppcCATable)
-		statedb.SetCode(txfilter.PPCCATableAccount, curBytes)
+	if msg.To() != nil {
+		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || (bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) &&
+			bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes())) {
+			txfilter.PPCCATableCopy = &ppcCATable
+			//persist ppcCaTable
+			if ppcCATable.ChangedFlagThisBlock {
+				curBytes, _ := json.Marshal(ppcCATable)
+				statedb.SetCode(txfilter.PPCCATableAccount, curBytes)
+			}
+		}
 	}
 
 	return r, msg, u, e
