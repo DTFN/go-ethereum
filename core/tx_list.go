@@ -19,7 +19,6 @@ package core
 import (
 	"bytes"
 	"container/heap"
-	"fmt"
 	"github.com/ethereum/go-ethereum/core/txfilter"
 	"math"
 	"math/big"
@@ -326,9 +325,6 @@ func (l *txList) Filter_relay(costLimit *big.Int, pool *TxPool, gasLimit uint64)
 			}
 		}
 	}
-	fmt.Println("----------use Old Filter Logic----------------")
-	fmt.Println(useOldFilterLogic)
-	fmt.Println("----------use Old Filter Logic----------------")
 	// If all transactions are below the threshold, short circuit
 
 	if useOldFilterLogic {

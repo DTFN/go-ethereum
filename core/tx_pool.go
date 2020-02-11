@@ -708,7 +708,6 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			fmt.Println(string(relayerTx.Data()))
 		}
 	}
-	fmt.Println("success passed valida signature")
 
 	// pool.chain.CurrentBlock.Number.Int64()+1 = nextBlock Number
 	// the added tx will be used in the nextBlock
