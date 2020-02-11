@@ -673,6 +673,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if tx.To() != nil {
 		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
 			originTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
+			originContractAddress := common.HexToAddress(originTxData.ContractAddress)
 			encodeRelayerBytes, _ := hex.DecodeString(originTxData.RelayerSignedMessage[2:])
 			relayerTx, err := PPCDecodeTx(encodeRelayerBytes)
 			if err != nil {
@@ -697,7 +698,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			}
 			//verify client address of relayer signature
 			clientAddress := common.HexToAddress(relayerSignedData.ClientAddress)
+			contractSignedAddress := common.HexToAddress(relayerSignedData.ContractAddress)
 			if !bytes.Equal(clientAddress.Bytes(), from.Bytes()) {
+				return ErrInvalidRelaySignature
+			}
+			if !bytes.Equal(contractSignedAddress.Bytes(), originContractAddress.Bytes()) {
 				return ErrInvalidRelaySignature
 			}
 			fmt.Println(string(relayerTx.Data()))

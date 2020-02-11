@@ -38,6 +38,7 @@ func ClientUnMarshalTxData(jsonByte []byte) (*ClientTxData, error) {
 type RelayerSignedData struct {
 	Nonce uint64 `json:"nonce"`
 	ClientAddress string `json:"clientAddress"`
+	ContractAddress string `json:"contractAddress"`
 	EncodeData string `json:"encodeData"`
 }
 
