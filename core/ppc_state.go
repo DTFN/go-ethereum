@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -33,7 +32,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	var originHash common.Hash
 	ppcCATable := txfilter.NewPPCCATable()
 
-	if bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) {
+	if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) {
 		msg, _ = tx.AsMessageWithFrom(from)
 	} else {
 		//ignore tx.data.amout to forbid eth-transfer-tx
@@ -94,9 +93,6 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAddress.Bytes()) {
 			relayTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
 			if err == nil {
-				fmt.Println("---------------relayTxData relayerSignedMessage-------------------")
-				fmt.Println(relayTxData.RelayerSignedMessage)
-				fmt.Println("---------------relayTxData relayerSignedMessage-------------------")
 				encodeBytes, _ := hex.DecodeString(relayTxData.EncodeData[2:])
 				contractAddress := common.HexToAddress(relayTxData.ContractAddress)
 				msg, _ = tx.AsMessageWithRelay(from, encodeBytes, contractAddress)
@@ -143,8 +139,8 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				}
 			}
 		}
-		//This is a mint-tx sent by ppchainadmin
-		if bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
+		//This is a mint-tx sent by bigguy
+		if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
 			msg, _ = tx.AsMessageWithPPCFrom(from)
 			mintData := string(msg.Data())
 			mintGasNumber, mintFlag = new(big.Int).SetString(mintData, 10)
@@ -331,11 +327,11 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 		st.refundGas()
 	}
 
-	st.state.AddBalance(txfilter.PPChainAdmin, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	st.state.AddBalance(txfilter.Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
-	//If mintFlag is true,mint gas to PPChainAdmin
+	//If mintFlag is true,mint gas to Bigguy
 	if mintFlag {
-		st.state.AddBalance(txfilter.PPChainAdmin, mintGasNumber)
+		st.state.AddBalance(txfilter.Bigguy, mintGasNumber)
 	}
 
 	gasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
@@ -417,59 +413,6 @@ func PPCDecodeTx(txBytes []byte) (*types.Transaction, error) {
 	}
 	return tx, nil
 }
-
-//func PPCIllegalRelayFrom(from, to common.Address, balance *big.Int, txDataBytes []byte, statedb *state.StateDB) (bool, error) {
-//	if txfilter.PPCTXCached == nil {
-//		txfilter.PPCTXCached = txfilter.NewPPCCachedTx()
-//	}
-//	txfilter.PPCTXCached.Mtx.Lock()
-//	defer txfilter.PPCTXCached.Mtx.Unlock()
-//
-//	//relayTx is a flag whether the tx is relay
-//	relayTx := false
-//	var err error
-//	var subFrom common.Address
-//	tx, _ := PPCDecodeTx(txDataBytes)
-//	var hashStr string
-//
-//	if txfilter.IsRelayAccount(to) {
-//		relayTx = true
-//
-//		data := txDataBytes
-//		hashData := md5.Sum(data)
-//		hashStr = hex.EncodeToString(hashData[:])
-//		_, ok := txfilter.PPCTXCached.CachedTx[hashStr]
-//		if ok {
-//			subFrom = txfilter.PPCTXCached.CachedTx[hashStr]
-//		} else {
-//
-//			var signer types.Signer = types.HomesteadSigner{}
-//			if tx.Protected() {
-//				signer = types.NewEIP155Signer(tx.ChainId())
-//			}
-//			// Make sure the transaction is signed properly
-//			subFrom, err = types.Sender(signer, tx)
-//
-//			if err != nil {
-//				delete(txfilter.PPCTXCached.CachedTx, hashStr)
-//				return relayTx, err
-//			}
-//		}
-//		//allow bigger nonce come in
-//		nonce := statedb.GetNonce(subFrom)
-//		if nonce > tx.Nonce() {
-//			//If hashStr existed in cachedTx, removed
-//			//This may called by recheckTx
-//			delete(txfilter.PPCTXCached.CachedTx, hashStr)
-//			return relayTx, ErrNonceTooLow
-//		} else {
-//			// verified success
-//			txfilter.PPCTXCached.CachedTx[hashStr] = subFrom
-//		}
-//
-//	}
-//	return relayTx, nil
-//}
 
 func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byte, currHeight uint64, statedb *state.StateDB) (err error) {
 	//verify whether the ppc-approved data is valid

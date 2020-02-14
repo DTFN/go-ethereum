@@ -19,6 +19,7 @@ var (
 	PPCCATableCopy *PPCCATable
 	UpgradeHeight  int64
 	PPChainAdmin   common.Address
+	Bigguy         common.Address
 )
 
 func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
