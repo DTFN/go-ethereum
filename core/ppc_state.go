@@ -33,7 +33,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	var originHash common.Hash
 	ppcCATable := txfilter.NewPPCCATable()
 
-	if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) {
+	if bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) {
 		msg, _ = tx.AsMessageWithFrom(from)
 	} else {
 		//ignore tx.data.amout to forbid eth-transfer-tx
@@ -41,7 +41,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	}
 
 	if msg.To() != nil {
-		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || (bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) &&
+		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || (bytes.Equal(msg.From().Bytes(), txfilter.PPChainAdmin.Bytes()) &&
 			bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes())) {
 			ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
 			if len(ppcTableBytes) != 0 {
@@ -55,7 +55,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 
 	if msg.To() == nil {
 	} else {
-		//bigguy may as relayyer and send bet-tx and deploy-contract
+		//ppchainadmin may as relayyer and send bet-tx and deploy-contract
 		//This is a bet-tx maybe sent by anyone
 		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
 			//msg.From must equals Permissoned_address
@@ -104,12 +104,12 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				relayerAccount = relayFrom
 			}
 		}
-		//This is an approved-tx sent by bigguy
-		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
+		//This is an approved-tx sent by ppchainadmin
+		if bytes.Equal(msg.From().Bytes(), txfilter.PPChainAdmin.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
 			//Init ppcCaTable
 			msg, _ = tx.AsMessageWithPPCFrom(from)
 			msgData := string(msg.Data())
-			//manage PPCCATable by bigguy
+			//manage PPCCATable by ppchainadmin
 			ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
 			switch ppcTxData.OperationType {
 			case "add":
@@ -135,7 +135,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				}
 			case "kickout":
 				{
-					//directly remove user in pos_table by bigguy
+					//directly remove user in pos_table by ppchainadmin
 					ppcCATable.ChangedFlagThisBlock = true
 					kickoutFlag = true
 					delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
@@ -143,8 +143,8 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				}
 			}
 		}
-		//This is a mint-tx sent by bigguy
-		if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
+		//This is a mint-tx sent by ppchainadmin
+		if bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.MintGasAccount.Bytes()) {
 			msg, _ = tx.AsMessageWithPPCFrom(from)
 			mintData := string(msg.Data())
 			mintGasNumber, mintFlag = new(big.Int).SetString(mintData, 10)
@@ -154,7 +154,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable, kickoutFlag, noErrorInDataFlag)
 
 	if msg.To() != nil {
-		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || (bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) &&
+		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || (bytes.Equal(msg.From().Bytes(), txfilter.PPChainAdmin.Bytes()) &&
 			bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes())) {
 			txfilter.PPCCATableCopy = &ppcCATable
 			//persist ppcCaTable
@@ -279,7 +279,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			if !kickoutFlag {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			} else {
-				st.state.SetNonce(txfilter.Bigguy, st.state.GetNonce(txfilter.Bigguy)+1)
+				st.state.SetNonce(txfilter.PPChainAdmin, st.state.GetNonce(txfilter.PPChainAdmin)+1)
 			}
 			//wenbin add,support multi-tx nonce
 
@@ -303,7 +303,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			if !kickoutFlag {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			} else {
-				st.state.SetNonce(txfilter.Bigguy, st.state.GetNonce(txfilter.Bigguy)+1)
+				st.state.SetNonce(txfilter.PPChainAdmin, st.state.GetNonce(txfilter.PPChainAdmin)+1)
 			}
 
 			isBetTx := false
@@ -331,11 +331,11 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 		st.refundGas()
 	}
 
-	st.state.AddBalance(txfilter.Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	st.state.AddBalance(txfilter.PPChainAdmin, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
-	//If mintFlag is true,mint gas to Bigguy
+	//If mintFlag is true,mint gas to PPChainAdmin
 	if mintFlag {
-		st.state.AddBalance(txfilter.Bigguy, mintGasNumber)
+		st.state.AddBalance(txfilter.PPChainAdmin, mintGasNumber)
 	}
 
 	gasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
@@ -347,7 +347,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 func (st *StateTransition) ppcKickoutPreCheck() error {
 	// Make sure this transaction's nonce is correct.
 	if st.msg.CheckNonce() {
-		nonce := st.state.GetNonce(txfilter.Bigguy)
+		nonce := st.state.GetNonce(txfilter.PPChainAdmin)
 		if nonce < st.msg.Nonce() {
 			return ErrNonceTooHigh
 		} else if nonce > st.msg.Nonce() {
@@ -473,7 +473,7 @@ func PPCDecodeTx(txBytes []byte) (*types.Transaction, error) {
 
 func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byte, currHeight uint64, statedb *state.StateDB) (err error) {
 	//verify whether the ppc-approved data is valid
-	if txfilter.IsBigGuy(from) && txfilter.IsPPCCATableAccount(to) {
+	if txfilter.IsPPChainAdmin(from) && txfilter.IsPPCCATableAccount(to) {
 		_, err := txfilter.PPCUnMarshalTxData(txDataBytes)
 		if err != nil {
 			return err

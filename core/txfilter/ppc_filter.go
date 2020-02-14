@@ -18,7 +18,7 @@ var (
 var (
 	PPCCATableCopy *PPCCATable
 	UpgradeHeight  int64
-	Bigguy         common.Address
+	PPChainAdmin   common.Address
 )
 
 func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
@@ -245,8 +245,8 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 	return false, nil
 }
 
-func IsBigGuy(from common.Address) bool {
-	return strings.EqualFold(from.String(), Bigguy.String())
+func IsPPChainAdmin(from common.Address) bool {
+	return strings.EqualFold(from.String(), PPChainAdmin.String())
 }
 
 func IsPPCCATableAccount(to common.Address) bool {
