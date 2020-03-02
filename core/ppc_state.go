@@ -20,7 +20,7 @@ import (
 	"unsafe"
 )
 
-func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config, isRelayTx bool, subFrom common.Address) (*types.Receipt, Message, uint64, error) {
+func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config, isRelayTx bool, relayFrom common.Address) (*types.Receipt, Message, uint64, error) {
 	mintFlag := false
 	multiRelayerFlag := false
 	kickoutFlag := false
@@ -30,7 +30,6 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	var mintGasNumber *big.Int
 	var relayerAccount common.Address
 	var originHash common.Hash
-	var relayNonce uint64
 	ppcCATable := txfilter.NewPPCCATable()
 
 	if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) {
@@ -40,17 +39,22 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		msg, _ = tx.AsMessageWithPPCFrom(from)
 	}
 
-	ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
-	if len(ppcTableBytes) != 0 {
-		json.Unmarshal(ppcTableBytes, &ppcCATable)
-	} else {
-		ppcTableBytes, _ = json.Marshal(ppcCATable)
+	if msg.To() != nil {
+		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || (bytes.Equal(msg.From().Bytes(), txfilter.PPChainAdmin.Bytes()) &&
+			bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes())) {
+			ppcTableBytes := statedb.GetCode(txfilter.PPCCATableAccount)
+			if len(ppcTableBytes) != 0 {
+				json.Unmarshal(ppcTableBytes, &ppcCATable)
+			} else {
+				ppcTableBytes, _ = json.Marshal(ppcCATable)
+			}
+			statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
+		}
 	}
-	statedb.SetCode(txfilter.PPCCATableAccount, ppcTableBytes)
 
 	if msg.To() == nil {
 	} else {
-		//bigguy may as relayyer and send bet-tx and deploy-contract
+		//ppchainadmin may as relayyer and send bet-tx and deploy-contract
 		//This is a bet-tx maybe sent by anyone
 		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) {
 			//msg.From must equals Permissoned_address
@@ -86,23 +90,22 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				log.Info("illeagal tx")
 			}
 		}
-		//This is a relay-tx maybe sent by anyone
-		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAccount.Bytes()) {
-			relayerAccount = msg.From()
-			originHash = tx.Hash()
-			relayNonce = tx.Nonce()
-
-			tx, _ = PPCDecodeTx(msg.Data())
-			msg, _ = tx.AsMessageWithPPCFrom(subFrom)
-			from = subFrom
-			multiRelayerFlag = isRelayTx
+		if bytes.Equal(msg.To().Bytes(), txfilter.RelayAddress.Bytes()) {
+			relayTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
+			if err == nil {
+				encodeBytes, _ := hex.DecodeString(relayTxData.EncodeData[2:])
+				contractAddress := common.HexToAddress(relayTxData.ContractAddress)
+				msg, _ = tx.AsMessageWithRelay(from, encodeBytes, contractAddress)
+				multiRelayerFlag = true
+				relayerAccount = relayFrom
+			}
 		}
-		//This is an approved-tx sent by bigguy
-		if bytes.Equal(msg.From().Bytes(), txfilter.Bigguy.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
+		//This is an approved-tx sent by ppchainadmin
+		if bytes.Equal(msg.From().Bytes(), txfilter.PPChainAdmin.Bytes()) && bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes()) {
 			//Init ppcCaTable
 			msg, _ = tx.AsMessageWithPPCFrom(from)
 			msgData := string(msg.Data())
-			//manage PPCCATable by bigguy
+			//manage PPCCATable by ppchainadmin
 			ppcTxData, _ := txfilter.PPCUnMarshalTxData([]byte(msgData))
 			switch ppcTxData.OperationType {
 			case "add":
@@ -128,7 +131,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 				}
 			case "kickout":
 				{
-					//directly remove user in pos_table by bigguy
+					//directly remove user in pos_table by ppchainadmin
 					ppcCATable.ChangedFlagThisBlock = true
 					kickoutFlag = true
 					delete(ppcCATable.PPCCATableItemMap, ppcTxData.PermissonedAddress)
@@ -144,26 +147,31 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 		}
 	}
 
-	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, relayNonce, &ppcCATable, kickoutFlag, noErrorInDataFlag)
+	r, u, e := ppcApplyTransactionMessage(originHash, config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, mintFlag, mintGasNumber, multiRelayerFlag, &relayerAccount, &ppcCATable, kickoutFlag, noErrorInDataFlag)
 
-	txfilter.PPCCATableCopy = &ppcCATable
-	//persist ppcCaTable
-	if ppcCATable.ChangedFlagThisBlock {
-		curBytes, _ := json.Marshal(ppcCATable)
-		statedb.SetCode(txfilter.PPCCATableAccount, curBytes)
+	if msg.To() != nil {
+		if bytes.Equal(msg.To().Bytes(), txfilter.SendToLock.Bytes()) || (bytes.Equal(msg.From().Bytes(), txfilter.PPChainAdmin.Bytes()) &&
+			bytes.Equal(msg.To().Bytes(), txfilter.PPCCATableAccount.Bytes())) {
+			txfilter.PPCCATableCopy = &ppcCATable
+			//persist ppcCaTable
+			if ppcCATable.ChangedFlagThisBlock {
+				curBytes, _ := json.Marshal(ppcCATable)
+				statedb.SetCode(txfilter.PPCCATableAccount, curBytes)
+			}
+		}
 	}
 
 	return r, msg, u, e
 }
 
-func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, relayNonce uint64, ppcCATable *txfilter.PPCCATable, kickoutFlag bool, noErrorInDataFlag bool) (*types.Receipt, uint64, error) {
+func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, ppcCATable *txfilter.PPCCATable, kickoutFlag bool, noErrorInDataFlag bool) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
 	// Apply the transaction to the current state (included in the env)
-	_, gas, failed, err, doFilterFlag := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, relayNonce, kickoutFlag, noErrorInDataFlag)
+	_, gas, failed, err, doFilterFlag := PPCApplyMessage(vmenv, msg, gp, mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, kickoutFlag, noErrorInDataFlag)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -180,22 +188,14 @@ func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConf
 	// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
 	// based on the eip phase, we're passing wether the root touch-delete accounts.
 	receipt := types.NewReceipt(root, failed, *usedGas)
-	if multiRelayerFlag {
-		receipt.TxHash = originHash
-	} else {
-		receipt.TxHash = tx.Hash()
-	}
+	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = gas
 	// if the transaction created a contract, store the creation address in the receipt.
 	if msg.To() == nil {
 		receipt.ContractAddress = crypto.CreateAddress(vmenv.Context.Origin, tx.Nonce())
 	}
 	// Set the receipt logs and create a bloom for filtering
-	if multiRelayerFlag {
-		receipt.Logs = statedb.GetLogs(originHash)
-	} else {
-		receipt.Logs = statedb.GetLogs(tx.Hash())
-	}
+	receipt.Logs = statedb.GetLogs(tx.Hash())
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
 	if doFilterFlag {
@@ -217,17 +217,17 @@ func ppcApplyTransactionMessage(originHash common.Hash, config *params.ChainConf
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, relayNonce uint64, kickoutFlag bool, noErrorInDataFlag bool) ([]byte, uint64, bool, error, bool) {
-	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, relayNonce, kickoutFlag, noErrorInDataFlag)
+func PPCApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, kickoutFlag bool, noErrorInDataFlag bool) ([]byte, uint64, bool, error, bool) {
+	return NewStateTransition(evm, msg, gp).PPCTransitionDb(mintFlag, mintGasNumber, multiRelayerFlag, relayerAccount, kickoutFlag, noErrorInDataFlag)
 }
 
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, relayNonce uint64, kickoutFlag bool, noErrorInDataFlag bool) (ret []byte, usedGas uint64, failed bool, err error, DofilterFlag bool) {
+func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int, multiRelayerFlag bool, relayerAccount *common.Address, kickoutFlag bool, noErrorInDataFlag bool) (ret []byte, usedGas uint64, failed bool, err error, DofilterFlag bool) {
 	dofilterFlag := false
 	if multiRelayerFlag {
-		if err = st.ppcPreCheck(relayerAccount, relayNonce); err != nil {
+		if err = st.ppcPreCheck(relayerAccount); err != nil {
 			return
 		}
 	} else if kickoutFlag {
@@ -269,21 +269,15 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 			} else {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 				//wenbin add,support multi-tx nonce
-				if multiRelayerFlag {
-					st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
-				}
 			}
 		} else {
 			// Increment the nonce for the next transaction
 			if !kickoutFlag {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			} else {
-				st.state.SetNonce(txfilter.Bigguy, st.state.GetNonce(txfilter.Bigguy)+1)
+				st.state.SetNonce(txfilter.PPChainAdmin, st.state.GetNonce(txfilter.PPChainAdmin)+1)
 			}
 			//wenbin add,support multi-tx nonce
-			if multiRelayerFlag {
-				st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
-			}
 
 			isBetTx, vmerr := txfilter.PPCDoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil && !isBetTx {
@@ -299,23 +293,13 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 			} else {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-
-				//wenbin add,support multi-tx nonce
-				if multiRelayerFlag {
-					st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
-				}
 			}
 		} else {
 			// Increment the nonce for the next transaction
 			if !kickoutFlag {
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			} else {
-				st.state.SetNonce(txfilter.Bigguy, st.state.GetNonce(txfilter.Bigguy)+1)
-			}
-
-			//wenbin add,support multi-tx nonce
-			if multiRelayerFlag {
-				st.state.SetNonce(*relayerAccount, st.state.GetNonce(*relayerAccount)+1)
+				st.state.SetNonce(txfilter.PPChainAdmin, st.state.GetNonce(txfilter.PPChainAdmin)+1)
 			}
 
 			isBetTx := false
@@ -359,7 +343,7 @@ func (st *StateTransition) PPCTransitionDb(mintFlag bool, mintGasNumber *big.Int
 func (st *StateTransition) ppcKickoutPreCheck() error {
 	// Make sure this transaction's nonce is correct.
 	if st.msg.CheckNonce() {
-		nonce := st.state.GetNonce(txfilter.Bigguy)
+		nonce := st.state.GetNonce(txfilter.PPChainAdmin)
 		if nonce < st.msg.Nonce() {
 			return ErrNonceTooHigh
 		} else if nonce > st.msg.Nonce() {
@@ -369,7 +353,7 @@ func (st *StateTransition) ppcKickoutPreCheck() error {
 	return st.buyGas()
 }
 
-func (st *StateTransition) ppcPreCheck(relayerAccount *common.Address, relayNonce uint64) error {
+func (st *StateTransition) ppcPreCheck(relayerAccount *common.Address) error {
 	// Make sure this transaction's nonce is correct.
 	if st.msg.CheckNonce() {
 		nonce := st.state.GetNonce(st.msg.From())
@@ -378,20 +362,13 @@ func (st *StateTransition) ppcPreCheck(relayerAccount *common.Address, relayNonc
 		} else if nonce > st.msg.Nonce() {
 			return ErrNonceTooLow
 		}
-		relayStateNonce := st.state.GetNonce(*relayerAccount)
-		if relayStateNonce < relayNonce {
-			return ErrNonceTooHigh
-		} else if relayStateNonce > relayNonce {
-			return ErrNonceTooLow
-		}
-
 	}
 	return st.ppcBuyGas(relayerAccount)
 }
 
 func (st *StateTransition) ppcBuyGas(relayerAccount *common.Address) error {
 	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
-	if st.state.GetBalance(st.msg.From()).Cmp(mgval) < 0 {
+	if st.state.GetBalance(*relayerAccount).Cmp(mgval) < 0 {
 		return errInsufficientBalanceForGas
 	}
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
@@ -437,62 +414,9 @@ func PPCDecodeTx(txBytes []byte) (*types.Transaction, error) {
 	return tx, nil
 }
 
-//func PPCIllegalRelayFrom(from, to common.Address, balance *big.Int, txDataBytes []byte, statedb *state.StateDB) (bool, error) {
-//	if txfilter.PPCTXCached == nil {
-//		txfilter.PPCTXCached = txfilter.NewPPCCachedTx()
-//	}
-//	txfilter.PPCTXCached.Mtx.Lock()
-//	defer txfilter.PPCTXCached.Mtx.Unlock()
-//
-//	//relayTx is a flag whether the tx is relay
-//	relayTx := false
-//	var err error
-//	var subFrom common.Address
-//	tx, _ := PPCDecodeTx(txDataBytes)
-//	var hashStr string
-//
-//	if txfilter.IsRelayAccount(to) {
-//		relayTx = true
-//
-//		data := txDataBytes
-//		hashData := md5.Sum(data)
-//		hashStr = hex.EncodeToString(hashData[:])
-//		_, ok := txfilter.PPCTXCached.CachedTx[hashStr]
-//		if ok {
-//			subFrom = txfilter.PPCTXCached.CachedTx[hashStr]
-//		} else {
-//
-//			var signer types.Signer = types.HomesteadSigner{}
-//			if tx.Protected() {
-//				signer = types.NewEIP155Signer(tx.ChainId())
-//			}
-//			// Make sure the transaction is signed properly
-//			subFrom, err = types.Sender(signer, tx)
-//
-//			if err != nil {
-//				delete(txfilter.PPCTXCached.CachedTx, hashStr)
-//				return relayTx, err
-//			}
-//		}
-//		//allow bigger nonce come in
-//		nonce := statedb.GetNonce(subFrom)
-//		if nonce > tx.Nonce() {
-//			//If hashStr existed in cachedTx, removed
-//			//This may called by recheckTx
-//			delete(txfilter.PPCTXCached.CachedTx, hashStr)
-//			return relayTx, ErrNonceTooLow
-//		} else {
-//			// verified success
-//			txfilter.PPCTXCached.CachedTx[hashStr] = subFrom
-//		}
-//
-//	}
-//	return relayTx, nil
-//}
-
 func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byte, currHeight uint64, statedb *state.StateDB) (err error) {
 	//verify whether the ppc-approved data is valid
-	if txfilter.IsBigGuy(from) && txfilter.IsPPCCATableAccount(to) {
+	if txfilter.IsPPChainAdmin(from) && txfilter.IsPPCCATableAccount(to) {
 		_, err := txfilter.PPCUnMarshalTxData(txDataBytes)
 		if err != nil {
 			return err

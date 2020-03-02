@@ -17,6 +17,8 @@
 package core
 
 import (
+	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -48,6 +50,8 @@ const (
 var (
 	// ErrInvalidSender is returned if the transaction contains an invalid signature.
 	ErrInvalidSender = errors.New("invalid sender")
+
+	ErrInvalidRelaySignature = errors.New("invalid relayer signature for relaytx")
 
 	// ErrNonceTooLow is returned if the nonce of a transaction is lower than the
 	// one present in the local chain.
@@ -228,9 +232,9 @@ type TxPool struct {
 	all     map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced  *txPricedList                      // All transactions sorted by price
 
-	blockArrive        bool //true when loop() wants to get lock
-	initTxCount        int
-	appConsumer        bool
+	blockArrive       bool //true when loop() wants to get lock
+	initTxCount       int
+	appConsumer       bool
 	currentTxPreEvent map[common.Hash]*TxPreEvent
 
 	flowLimit     bool
@@ -251,22 +255,22 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-		config:             config,
-		chainconfig:        chainconfig,
-		chain:              chain,
-		signer:             types.NewEIP155Signer(chainconfig.ChainId),
-		pending:            make(map[common.Address]*txList),
-		queue:              make(map[common.Address]*txList),
-		beats:              make(map[common.Address]time.Time),
-		all:                make(map[common.Hash]*types.Transaction),
-		chainHeadCh:        make(chan ChainHeadEvent, chainHeadChanSize),
-		cachedTxs:          make(chan TxCallback, cachedTxSize),
+		config:            config,
+		chainconfig:       chainconfig,
+		chain:             chain,
+		signer:            types.NewEIP155Signer(chainconfig.ChainId),
+		pending:           make(map[common.Address]*txList),
+		queue:             make(map[common.Address]*txList),
+		beats:             make(map[common.Address]time.Time),
+		all:               make(map[common.Hash]*types.Transaction),
+		chainHeadCh:       make(chan ChainHeadEvent, chainHeadChanSize),
+		cachedTxs:         make(chan TxCallback, cachedTxSize),
 		currentTxPreEvent: make(map[common.Hash]*TxPreEvent),
-		gasPrice:           new(big.Int).SetUint64(config.PriceLimit),
-		initTxCount:        0,
-		flowLimit:          false,
-		appConsumer:        false,
-		hasCachedTxs:       false,
+		gasPrice:          new(big.Int).SetUint64(config.PriceLimit),
+		initTxCount:       0,
+		flowLimit:         false,
+		appConsumer:       false,
+		hasCachedTxs:      false,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
@@ -624,6 +628,20 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 // validateTx checks whether a transaction is valid according to the consensus
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
+	// If the transaction fails basic validation, discard it
+	relayContractTxFlag := false
+	balanceCheckAddress := common.Address{}
+	if tx.To() != nil {
+		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
+			originTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
+			if err == nil {
+				balanceCheckAddress = common.HexToAddress(originTxData.RelayerAddress)
+				relayContractTxFlag = true
+			} else {
+			}
+		}
+	}
+
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
 	if tx.Size() > 32*1024 {
 		return ErrOversizedData
@@ -647,22 +665,66 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		to = &common.Address{}
 	}
 
+	if !relayContractTxFlag {
+		balanceCheckAddress = from
+	}
+
+	//valid signature
+	if tx.To() != nil {
+		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
+			originTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
+			originContractAddress := common.HexToAddress(originTxData.ContractAddress)
+			encodeRelayerBytes, _ := hex.DecodeString(originTxData.RelayerSignedMessage[2:])
+			relayerTx, err := PPCDecodeTx(encodeRelayerBytes)
+			if err != nil {
+				return ErrInvalidRelaySignature
+			}
+			relayerAddress, err := types.Sender(pool.signer, relayerTx)
+			if err != nil {
+				return ErrInvalidRelaySignature
+			}
+			//verify the relayer address is right
+			if !bytes.Equal(relayerAddress.Bytes(), balanceCheckAddress.Bytes()) {
+				return ErrInvalidRelaySignature
+			}
+			//make sure the signed data is legal json
+			relayerSignedData, err := txfilter.RelayUnMarshalSignedTxData([]byte(string(relayerTx.Data())))
+			if err != nil {
+				return ErrInvalidRelaySignature
+			}
+			//verify client nonce of relayer signature
+			if relayerSignedData.Nonce != tx.Nonce() {
+				return ErrInvalidRelaySignature
+			}
+			//verify client address of relayer signature
+			clientAddress := common.HexToAddress(relayerSignedData.ClientAddress)
+			contractSignedAddress := common.HexToAddress(relayerSignedData.ContractAddress)
+			if !bytes.Equal(clientAddress.Bytes(), from.Bytes()) {
+				return ErrInvalidRelaySignature
+			}
+			if !bytes.Equal(contractSignedAddress.Bytes(), originContractAddress.Bytes()) {
+				return ErrInvalidRelaySignature
+			}
+			fmt.Println(string(relayerTx.Data()))
+		}
+	}
+
 	// pool.chain.CurrentBlock.Number.Int64()+1 = nextBlock Number
 	// the added tx will be used in the nextBlock
 	nextBlockNumber := pool.chain.CurrentBlock().Number().Uint64() + 1
 	if nextBlockNumber >= uint64(txfilter.UpgradeHeight) {
-		err = PPCIllegalForm(from, *to, pool.currentState.GetBalance(from), tx.Data(), nextBlockNumber, pool.currentState)
+		err = PPCIllegalForm(from, *to, pool.currentState.GetBalance(balanceCheckAddress), tx.Data(), nextBlockNumber, pool.currentState)
 		if err != nil {
 			return err
 		}
 
 		//validate ppcIsBetTx
-		err = txfilter.PPCIsBlocked(from, *to, pool.currentState.GetBalance(from), tx.Data())
+		err = txfilter.PPCIsBlocked(from, *to, pool.currentState.GetBalance(balanceCheckAddress), tx.Data())
 		if err != nil {
 			return err
 		}
 	} else {
-		err = txfilter.IsBlocked(from, *to, pool.currentState.GetBalance(from), tx.Data())
+		err = txfilter.IsBlocked(from, *to, pool.currentState.GetBalance(balanceCheckAddress), tx.Data())
 		if err != nil {
 			return err
 		}
@@ -679,7 +741,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
-	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+	if pool.currentState.GetBalance(balanceCheckAddress).Cmp(tx.Cost()) < 0 {
 		return ErrInsufficientFunds
 	}
 	intrGas, err := IntrinsicGas(tx.Data(), tx.To() == nil, pool.homestead)
@@ -864,6 +926,19 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	}
 	txPreEvent.From = addr
 	txPreEvent.Tx = tx
+
+	if tx.To() != nil {
+		if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
+			relayTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
+			if err == nil {
+				relayerAddress := common.HexToAddress(relayTxData.RelayerAddress)
+				txPreEvent.RelayAddress = relayerAddress
+				txPreEvent.RelayTxFlag = true
+			}
+		} else {
+			txPreEvent.RelayTxFlag = false
+		}
+	}
 
 	pool.txFeed.Send(*txPreEvent) //leilei delete go routine call for ethermint checkTx
 }
@@ -1233,7 +1308,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 			pool.priced.Removed()
 		}
 		// Drop all transactions that are too costly (low balance or out of gas)
-		drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+		drops, _ := list.Filter_relay(pool.currentState.GetBalance(addr), pool, pool.currentMaxGas)
 		for _, tx := range drops {
 			hash := tx.Hash()
 			log.Trace("Removed unpayable queued transaction", "hash", hash)
@@ -1392,7 +1467,7 @@ func (pool *TxPool) demoteUnexecutables() {
 			pool.priced.Removed()
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
-		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+		drops, invalids := list.Filter_relay(pool.currentState.GetBalance(addr), pool, pool.currentMaxGas)
 		for _, tx := range drops {
 			hash := tx.Hash()
 			log.Trace("Removed unpayable pending transaction", "hash", hash)

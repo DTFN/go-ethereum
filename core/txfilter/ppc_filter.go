@@ -1,6 +1,7 @@
 package txfilter
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	tmTypes "github.com/tendermint/tendermint/types"
@@ -11,12 +12,13 @@ import (
 var (
 	MintGasAccount    = common.HexToAddress("0x1111111111111111111111111111111111111111")
 	PPCCATableAccount = common.HexToAddress("0x2222222222222222222222222222222222222222")
-	RelayAccount      = common.HexToAddress("0x3333333333333333333333333333333333333333")
+	RelayAddress      = common.HexToAddress("0x3333333333333333333333333333333333333333")
 )
 
 var (
 	PPCCATableCopy *PPCCATable
 	UpgradeHeight  int64
+	PPChainAdmin   common.Address
 	Bigguy         common.Address
 )
 
@@ -244,8 +246,8 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 	return false, nil
 }
 
-func IsBigGuy(from common.Address) bool {
-	return strings.EqualFold(from.String(), Bigguy.String())
+func IsPPChainAdmin(from common.Address) bool {
+	return strings.EqualFold(from.String(), PPChainAdmin.String())
 }
 
 func IsPPCCATableAccount(to common.Address) bool {
@@ -253,5 +255,5 @@ func IsPPCCATableAccount(to common.Address) bool {
 }
 
 func IsRelayAccount(to common.Address) bool {
-	return strings.EqualFold(to.String(), RelayAccount.String())
+	return bytes.Equal(to.Bytes(), RelayAddress.Bytes())
 }
