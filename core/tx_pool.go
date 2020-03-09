@@ -730,6 +730,14 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		}
 	}
 
+	//if nextBlockNumber >= uint64(txfilter.UpgradeHeight) {
+	//	lowerGasPriceLimit := big.NewInt(2000000000000)
+	//	if lowerGasPriceLimit.Cmp(tx.GasPrice()) > 0 {
+	//		log.Info("under priced transaction")
+	//		return ErrUnderpriced
+	//	}
+	//}
+
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
 	if !local && pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
