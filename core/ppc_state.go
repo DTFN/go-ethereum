@@ -32,7 +32,7 @@ func PPCApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, aut
 	var originHash common.Hash
 	ppcCATable := txfilter.NewPPCCATable()
 
-	if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) || bytes.Equal(msg.To().Bytes(),txfilter.PPChainAdmin.Bytes()){
+	if bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) || bytes.Equal(from.Bytes(),txfilter.PPChainAdmin.Bytes()){
 		msg, _ = tx.AsMessageWithFrom(from)
 	} else {
 		//ignore tx.data.amout to forbid eth-transfer-tx
