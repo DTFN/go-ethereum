@@ -89,6 +89,8 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 				tmpInt := big.NewInt(0)
 				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 				if 1 > currentSlots {
+					fmt.Println("test1.1")
+					fmt.Println(currentSlots)
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
@@ -225,6 +227,8 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 				tmpInt := big.NewInt(0)
 				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 				if 1 > currentSlots {
+					fmt.Println("test1.1")
+					fmt.Println(currentSlots)
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}

@@ -91,6 +91,8 @@ func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte)
 				//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 				currentSlots := int64(10)
 				if 1 > currentSlots {
+					fmt.Println("test1.1")
+					fmt.Println(currentSlots)
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
@@ -231,6 +233,8 @@ func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, 
 				//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 				currentSlots := int64(10)
 				if 1 > currentSlots {
+					fmt.Println("test1.1")
+					fmt.Println(currentSlots)
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
