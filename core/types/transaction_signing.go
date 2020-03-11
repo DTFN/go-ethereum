@@ -98,6 +98,10 @@ type Signer interface {
 	SignatureValues(tx *Transaction, sig []byte) (r, s, v *big.Int, err error)
 	// Hash returns the hash to be signed.
 	Hash(tx *Transaction) common.Hash
+	// Relayer tx sender returns the relayer address of the signed sub transaction.
+	RelaySender(tx *Transaction, from common.Address) (common.Address, error)
+	// The rule of relayer sign the sub tx should sign on the original from
+	HashWithFrom(tx *Transaction, from common.Address) common.Hash
 	// Equal returns true if the given signer is the same as the receiver.
 	Equal(Signer) bool
 }
@@ -136,6 +140,18 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	return recoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true)
 }
 
+func (s EIP155Signer) RelaySender(tx *Transaction, from common.Address) (common.Address, error) {
+	if !tx.Protected() {
+		return HomesteadSigner{}.Sender(tx)
+	}
+	if tx.ChainId().Cmp(s.chainId) != 0 {
+		return common.Address{}, ErrInvalidChainId
+	}
+	V := new(big.Int).Sub(tx.data.V, s.chainIdMul)
+	V.Sub(V, big8)
+	return recoverPlain(s.HashWithFrom(tx, from), tx.data.R, tx.data.S, V, true)
+}
+
 // WithSignature returns a new transaction with the given signature. This signature
 // needs to be in the [R || S || V] format where V is 0 or 1.
 func (s EIP155Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *big.Int, err error) {
@@ -161,6 +177,18 @@ func (s EIP155Signer) Hash(tx *Transaction) common.Hash {
 		tx.data.Amount,
 		tx.data.Payload,
 		s.chainId, uint(0), uint(0),
+	})
+}
+
+func (s EIP155Signer) HashWithFrom(tx *Transaction, from common.Address) common.Hash {
+	return rlpHash([]interface{}{
+		tx.data.AccountNonce,
+		tx.data.Price,
+		tx.data.GasLimit,
+		tx.data.Recipient,
+		tx.data.Amount,
+		tx.data.Payload,
+		s.chainId, uint(0), uint(0), from,
 	})
 }
 
@@ -215,8 +243,20 @@ func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 	})
 }
 
-func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
-	return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
+func (fs FrontierSigner) HashWithFrom(tx *Transaction, from common.Address) common.Hash {
+	return rlpHash([]interface{}{
+		tx.data.AccountNonce,
+		tx.data.Price,
+		tx.data.GasLimit,
+		tx.data.Recipient,
+		tx.data.Amount,
+		tx.data.Payload,
+		from,
+	})
+}
+
+func (fs FrontierSigner) RelaySender(tx *Transaction, from common.Address) (common.Address, error) {
+	return recoverPlain(fs.HashWithFrom(tx, from), tx.data.R, tx.data.S, tx.data.V, false)
 }
 
 func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {

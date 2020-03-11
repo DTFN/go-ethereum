@@ -1,259 +1,152 @@
 package txfilter
 
 import (
+	"errors"
 	"bytes"
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	tmTypes "github.com/tendermint/tendermint/types"
+	"github.com/ethereum/go-ethereum/core/types"
+	"fmt"
 	"math/big"
-	"strings"
 )
 
 var (
-	MintGasAccount    = common.HexToAddress("0x1111111111111111111111111111111111111111")
-	PPCCATableAccount = common.HexToAddress("0x2222222222222222222222222222222222222222")
-	RelayAddress      = common.HexToAddress("0x3333333333333333333333333333333333333333")
+	SendToMint  = common.HexToAddress("0x1111111111111111111111111111111111111111")
+	SendToAuth  = common.HexToAddress("0x2222222222222222222222222222222222222222")
+	SendToRelay = common.HexToAddress("0x3333333333333333333333333333333333333333")
+
+	ErrPermitTableNotCreate = errors.New("PermitTable has not created yet")
 )
 
 var (
-	PPCCATableCopy *PPCCATable
-	UpgradeHeight  int64
-	PPChainAdmin   common.Address
-	Bigguy         common.Address
+	PPChainAdmin common.Address
+	Bigguy       common.Address
 )
 
-func PPCIsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
-	if EthPosTable == nil {
-		return ErrPosTableNotCreate
+//signed data: rlp(subTransaction fields + from)
+func DeriveRelayer(from common.Address, txDataBytes []byte) (subTx *types.Transaction, relayer common.Address, err error) {
+	subTx, err = types.DecodeTx(txDataBytes)
+	if err != nil {
+		return subTx, common.Address{}, fmt.Errorf("ppc tx data is not a subTx structure. %v", err)
 	}
-	EthPosTable.Mtx.RLock()
-	defer EthPosTable.Mtx.RUnlock()
-	if !EthPosTable.InitFlag {
-		return ErrPosTableNotInit
+	var signer types.Signer = types.HomesteadSigner{}
+	if subTx.Protected() {
+		signer = types.NewEIP155Signer(subTx.ChainId())
 	}
-	posItem, exist := EthPosTable.PosItemMap[from]
-	if exist {
-		if IsUnlockTx(to) {
-			return EthPosTable.CanRemovePosItem()
-		} else if IsLockTx(to) {
-			//wenbin add, ignore balance judge
-			//tmpInt := big.NewInt(0)
-			//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
-			currentSlots := int64(10)
-			if posItem.Slots >= currentSlots {
-				return fmt.Errorf("signer %X already bonded at height %d ,balance has not increased", from, posItem.Height)
-			}
+	relayer, err = signer.RelaySender(subTx, from)
+	return
+}
 
-			txData, err := UnMarshalTxData(txDataBytes)
-			if err != nil {
-				return err
-			}
-			pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
-			if err != nil {
-				return err
-			}
-			tmAddress := pubKey.Address().String()
-			if posItem.TmAddress != tmAddress {
-				return fmt.Errorf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
-			}
-			if posItem.BlsKeyString != txData.BlsKeyString {
-				return fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
-			}
-			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
-			if !exist {
-				panic(fmt.Sprintf("tmAddress %v already be bonded by %X, but not found in TmAddressToSignerMap", tmAddress, from))
-			}
-			_, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
-			if !exist {
-				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
-			}
+func CheckRelayerTx(tx, subTx *types.Transaction) (err error) {
+	if tx.Nonce() != subTx.Nonce() {
+		fmt.Printf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
+		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
+	}
+	if tx.Value() != subTx.Value() {
+		fmt.Printf("tx value %v not equal to sub tx value %v", tx.Value(), subTx.Value())
+		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Value(), subTx.Value())
+	}
+	if tx.GasPrice() != subTx.GasPrice() {
+		fmt.Printf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
+		return fmt.Errorf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
+	}
+	if tx.Gas() != subTx.Gas() {
+		fmt.Printf("tx gasLimit %v not equal to sub tx gasLimit %v", tx.Gas(), subTx.Gas())
+		return fmt.Errorf("tx gasLimit %v not equal to sub tx gasLimit %v", tx.Gas(), subTx.Gas())
+	}
+}
 
-			return nil
-		} else {
-			return fmt.Errorf("signer %X bonded at height %d ", from, posItem.Height)
-		}
-	} else {
-		posItem, exist := EthPosTable.UnbondPosItemMap[from]
+func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err error) {
+	var ppcdata AuthData
+	ppcdata, err = UnMarshalPermitTxData(txDataBytes)
+	if err != nil {
+		fmt.Printf("admin %X sent an auth tx with illegal format \n", from)
+		return fmt.Errorf("admin %X sent an auth tx with illegal format \n", from)
+	}
+	if EthPermitTable == nil {
+		return ErrPermitTableNotCreate
+	}
+	EthPermitTable.Mtx.RLock()
+	if ppcdata.OperationType == "add" {
+		permitItem, exist := EthPermitTable.PermitItemMap[ppcdata.PermittedAddress]
 		if exist {
-			if IsUnlockTx(to) {
-				return fmt.Errorf("signer %X already unbonded at height %d", from, posItem.Height)
-			} else if IsLockTx(to) {
-				return fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
-			} else {
-				return fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
-			}
+			EthPermitTable.Mtx.RUnlock()
+			fmt.Printf("addr %X already permitted at height %d , permit range [%v,%v]", ppcdata.PermittedAddress, permitItem.PermitHeight, permitItem.StartHeight, permitItem.EndHeight)
+			return fmt.Errorf("addr %X already permitted at height %d , permit range [%v,%v]", ppcdata.PermittedAddress, permitItem.PermitHeight, permitItem.StartHeight, permitItem.EndHeight)
 		} else {
-			if IsUnlockTx(to) {
-				return fmt.Errorf("signer %X has not bonded ", from)
-			} else if IsLockTx(to) { //first lock
-				//wenbin add, ignore balance judge
-				//tmpInt := big.NewInt(0)
-				//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
-				currentSlots := int64(10)
-				if 1 > currentSlots {
-					fmt.Printf("signer %X doesn't have one slot of money", from)
-					return fmt.Errorf("signer %X doesn't have one slot of money", from)
-				}
-				txData, err := UnMarshalTxData(txDataBytes)
-				if err != nil {
-					return err
-				}
-				if len(txData.BlsKeyString) == 0 {
-					return fmt.Errorf("len(txData.BlsKeyString)==0, wrong BlsKeyString? %v", txData.BlsKeyString)
-				}
-				pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
-				if err != nil {
-					return err
-				}
-				tmAddress := pubKey.Address().String()
-				if len(tmAddress) == 0 {
-					return fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
-				}
-				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
-				if exist {
-					return fmt.Errorf("tmAddress %v already be bonded by %X", tmAddress, signer)
-				}
-				signer, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
-				if exist {
-					return fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
-				}
+			if _, exist := EthPermitTable.PermitItemMap[ppcdata.PermittedAddress]; exist {
+				return fmt.Errorf("insertPermitItem in auth check, permittedAddr %X already exist", ppcdata.PermittedAddress)
 			}
+			EthPermitTable.Mtx.RUnlock()
+			return
 		}
+	} else if ppcdata.OperationType == "remove" {
+		if _, exist := EthPermitTable.PermitItemMap[ppcdata.PermittedAddress]; !exist {
+			return fmt.Errorf("removePermitItem in auth check, permittedAddr %X not exists", ppcdata.PermittedAddress)
+		}
+		EthPermitTable.Mtx.RUnlock()
+		return
+	} else if ppcdata.OperationType == "kickout" {
+		EthPermitTable.Mtx.RUnlock()
+		EthPosTable.Mtx.RLock()
+		defer EthPosTable.Mtx.RUnlock()
+		if _, ok := EthPosTable.PosItemMap[ppcdata.PermittedAddress]; !ok {
+			fmt.Printf("admin %X wants to kickout %X, but it is not in the PosTable \n", from, ppcdata.PermittedAddress)
+			return fmt.Errorf("admin %X wants to kickout %X, but it is not in the PosTable \n", from, ppcdata.PermittedAddress)
+		}
+		return EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false)
 	}
-
-	_, isSpecificAddress := w[from]
-	if isSpecificAddress {
-		return fmt.Errorf("Specific Account %v should be blocked ", from)
-	}
-	return nil
+	return fmt.Errorf("admin %X sent an unrecognized OperationType %v \n", from, ppcdata.OperationType)
 }
 
-func PPCDoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
-	if EthPosTable == nil { //should not happen
-		fmt.Printf("PosTable has not created yet")
-		return false, ErrPosTableNotCreate
+func DoAuthHandle(from, to common.Address, balance *big.Int, txDataBytes []byte, height int64) (err error) {
+	var ppcdata AuthData
+	ppcdata, err = UnMarshalPermitTxData(txDataBytes)
+	if err != nil {
+		fmt.Printf("admin %X sent an auth tx with illegal format \n", from)
+		return fmt.Errorf("admin %X sent an auth tx with illegal format \n", from)
 	}
-	EthPosTable.Mtx.Lock()
-	defer EthPosTable.Mtx.Unlock()
-	if !EthPosTable.InitFlag { //should not happen
-		fmt.Printf("PosTable has not init yet")
-		return false, ErrPosTableNotInit
+	if EthPermitTable == nil {
+		return ErrPermitTableNotCreate
 	}
-	posItem, exist := EthPosTable.PosItemMap[from]
-	if exist {
-		if IsUnlockTx(to) {
-			return true, EthPosTable.RemovePosItem(from, height, false)
-		} else if IsLockTx(to) { //relock
-			//wenbin add, ignore balance judge
-			//tmpInt := big.NewInt(0)
-			//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
-			currentSlots := int64(10)
-			if posItem.Slots >= currentSlots {
-				fmt.Printf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
-				return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
-			}
-
-			txData, err := UnMarshalTxData(txDataBytes)
-			if err != nil {
-				return true, err
-			}
-			pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
-			if err != nil {
-				return true, err
-			}
-			tmAddress := pubKey.Address().String()
-			if posItem.TmAddress != tmAddress {
-				fmt.Printf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
-				return true, fmt.Errorf("signer %X bonded tmAddress %v not matched with current tmAddress %v ", from, posItem.TmAddress, tmAddress)
-			}
-			if posItem.BlsKeyString != txData.BlsKeyString {
-				fmt.Printf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
-				return true, fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
-			}
-			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
-			if !exist {
-				panic(fmt.Sprintf("tmAddress %v already be bonded by %X, but not found in TmAddressToSignerMap", tmAddress, from))
-			}
-			_, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
-			if !exist {
-				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
-			}
-			EthPosTable.UpdatePosItem(from, currentSlots)
-			return true, nil
-		} else {
-			return false, fmt.Errorf("signer %X bonded at height %d ", from, posItem.Height)
-		}
-	} else {
-		posItem, exist := EthPosTable.UnbondPosItemMap[from]
+	EthPermitTable.Mtx.Lock()
+	if ppcdata.OperationType == "add" {
+		permitItem, exist := EthPermitTable.PermitItemMap[ppcdata.PermittedAddress]
 		if exist {
-			if IsUnlockTx(to) {
-				fmt.Printf("signer %X already unbonded at height %d", from, posItem.Height)
-				return true, fmt.Errorf("signer %X already unbonded at height %d", from, posItem.Height)
-			} else if IsLockTx(to) {
-				fmt.Printf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
-				return true, fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
-			} else {
-				fmt.Printf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
-				return false, fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
-			}
+			EthPermitTable.Mtx.Unlock()
+			fmt.Printf("addr %X already permitted at height %d , permit range [%v,%v]", ppcdata.PermittedAddress, permitItem.PermitHeight, permitItem.StartHeight, permitItem.EndHeight)
+			return fmt.Errorf("addr %X already permitted at height %d , permit range [%v,%v]", ppcdata.PermittedAddress, permitItem.PermitHeight, permitItem.StartHeight, permitItem.EndHeight)
 		} else {
-			if IsUnlockTx(to) {
-				fmt.Printf("signer %X has not bonded ", from)
-				return true, fmt.Errorf("signer %X has not bonded ", from)
-			} else if IsLockTx(to) { //first lock
-				txData, err := UnMarshalTxData(txDataBytes)
-				if err != nil {
-					return true, err
-				}
-				if len(txData.BlsKeyString) == 0 {
-					return true, fmt.Errorf("len(txData.BlsKeyString)==0, wrong BlsKeyString? %v", txData.BlsKeyString)
-				}
-				pubKey, err := tmTypes.PB2TM.PubKey(txData.PubKey)
-				if err != nil {
-					return true, err
-				}
-				tmAddress := pubKey.Address().String()
-				if len(tmAddress) == 0 {
-					return true, fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
-				}
-				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
-				if exist {
-					fmt.Printf("tmAddress %v already be bonded by %X", tmAddress, signer)
-					return true, fmt.Errorf("tmAddress %v already be bonded by %X", tmAddress, signer)
-				}
-				signer, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
-				if exist {
-					fmt.Printf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
-					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
-				}
-				//wenbin add, ignore balance judge
-				//tmpInt := big.NewInt(0)
-				//currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
-				currentSlots := int64(10)
-				if 1 > currentSlots {
-					fmt.Printf("signer %X doesn't have one slot of money", from)
-					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
-				}
-				return true, EthPosTable.InsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
+			permitItem = &PermitItem{
+				ApprovedTxDataHash: ppcdata.ApprovedTxDataHash,
+				StartHeight:        ppcdata.StartBlockHeight,
+				EndHeight:          ppcdata.EndBlockHeight,
+				PermitHeight:       height,
 			}
+			err = EthPermitTable.InsertPermitItem(ppcdata.PermittedAddress, permitItem)
+			EthPermitTable.Mtx.Unlock()
+			return
 		}
+	} else if ppcdata.OperationType == "remove" {
+		err = EthPermitTable.DeletePermitItem(ppcdata.PermittedAddress)
+		EthPermitTable.Mtx.Unlock()
+		return
+	} else if ppcdata.OperationType == "kickout" {
+		EthPermitTable.Mtx.Unlock()
+		EthPosTable.Mtx.Lock()
+		defer EthPosTable.Mtx.Unlock()
+		return EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false)
 	}
-
-	_, isSpecificAddress := w[from]
-	if isSpecificAddress {
-		return false, fmt.Errorf("Specific Account %v should be blocked ", from)
-	}
-	return false, nil
+	return fmt.Errorf("admin %X sent an unrecognized OperationType %v \n", from, ppcdata.OperationType)
 }
 
-func IsPPChainAdmin(from common.Address) bool {
-	return strings.EqualFold(from.String(), PPChainAdmin.String())
+func IsMintTx(to common.Address) bool {
+	return bytes.Equal(to.Bytes(), SendToMint.Bytes())
 }
 
-func IsPPCCATableAccount(to common.Address) bool {
-	return strings.EqualFold(to.String(), PPCCATableAccount.String())
+func IsAuthTx(to common.Address) bool {
+	return bytes.Equal(to.Bytes(), SendToAuth.Bytes())
 }
 
-func IsRelayAccount(to common.Address) bool {
-	return bytes.Equal(to.Bytes(), RelayAddress.Bytes())
+func IsRelayTx(to common.Address) bool {
+	return bytes.Equal(to.Bytes(), SendToRelay.Bytes())
 }

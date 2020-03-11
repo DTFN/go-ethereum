@@ -19,7 +19,6 @@ package types
 import (
 	"container/heap"
 	"errors"
-	"github.com/ethereum/go-ethereum/core/txfilter"
 	"io"
 	"math/big"
 	"sync/atomic"
@@ -28,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"bytes"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
@@ -249,64 +249,14 @@ func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
 	return msg, nil
 }
 
-func (tx *Transaction) AsMessageWithErrorData(from common.Address) (Message, error) {
-	msg := Message{
-		nonce:      tx.data.AccountNonce,
-		gasLimit:   tx.data.GasLimit,
-		gasPrice:   new(big.Int).Set(tx.data.Price),
-		to:         &txfilter.Bigguy,
-		from:       from,
-		amount:     tx.data.Amount,
-		data:       tx.data.Payload,
-		checkNonce: true,
+// rlp decode an etherum transaction
+func DecodeTx(txBytes []byte) (*Transaction, error) {
+	tx := new(Transaction)
+	rlpStream := rlp.NewStream(bytes.NewBuffer(txBytes), 0)
+	if err := tx.DecodeRLP(rlpStream); err != nil {
+		return nil, err
 	}
-
-	return msg, nil
-}
-
-func (tx *Transaction) AsMessageWithPPCFrom(from common.Address) (Message, error) {
-	msg := Message{
-		nonce:      tx.data.AccountNonce,
-		gasLimit:   tx.data.GasLimit,
-		gasPrice:   new(big.Int).Set(tx.data.Price),
-		to:         tx.data.Recipient,
-		from:       from,
-		amount:     big.NewInt(0),
-		data:       tx.data.Payload,
-		checkNonce: true,
-	}
-
-	return msg, nil
-}
-
-func (tx *Transaction) AsMessageWithRelay(from common.Address,encodeDataBytes []byte,to common.Address) (Message, error) {
-	msg := Message{
-		nonce:      tx.data.AccountNonce,
-		gasLimit:   tx.data.GasLimit,
-		gasPrice:   new(big.Int).Set(tx.data.Price),
-		to:         &to,
-		from:       from,
-		amount:     tx.data.Amount,
-		data:       encodeDataBytes,
-		checkNonce: true,
-	}
-
-	return msg, nil
-}
-
-func (tx *Transaction) AsMessageWithKickoutFrom(from, to common.Address) (Message, error) {
-	msg := Message{
-		nonce:      tx.data.AccountNonce,
-		gasLimit:   tx.data.GasLimit,
-		gasPrice:   new(big.Int).Set(tx.data.Price),
-		to:         &to,
-		from:       from,
-		amount:     big.NewInt(0),
-		data:       tx.data.Payload,
-		checkNonce: true,
-	}
-
-	return msg, nil
+	return tx, nil
 }
 
 // WithSignature returns a new transaction with the given signature.

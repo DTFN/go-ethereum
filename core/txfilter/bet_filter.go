@@ -16,15 +16,27 @@ var (
 
 	ErrPosTableNotCreate = errors.New("PosTable has not created yet")
 	ErrPosTableNotInit   = errors.New("PosTable has not init yet")
-	ErrIllegalBetTx      = errors.New("Err Illegal Bet Tx")
+
+	UpgradeHeight int64
 )
 
 func init() {
 	w[SendToLock] = true
 	w[SendToUnlock] = true
+	w[SendToAuth] = true
+	w[SendToRelay] = true
+	w[SendToMint] = true
 }
 
-func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (err error) {
+func IsMintBlocked(from common.Address) (err error) {
+	if from != Bigguy {
+		fmt.Printf("Not big guy %X account tries to mint, block it \n", from)
+		return fmt.Errorf("Not big guy %X account tries to mint, block it \n", from)
+	}
+	return nil
+}
+
+func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64) (err error) {
 	if EthPosTable == nil {
 		return ErrPosTableNotCreate
 	}
@@ -35,11 +47,16 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 	}
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {
-		if IsUnlockTx(to) {
+		if to != nil && IsUnlockTx(*to) {
 			return EthPosTable.CanRemovePosItem()
-		} else if IsLockTx(to) {
-			tmpInt := big.NewInt(0)
-			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+		} else if to != nil && IsLockTx(*to) {
+			currentSlots := int64(0)
+			if height < UpgradeHeight {
+				tmpInt := big.NewInt(0)
+				currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+			} else {
+				currentSlots = int64(10)
+			}
 			if posItem.Slots >= currentSlots {
 				return fmt.Errorf("signer %X already bonded at height %d ,balance has not increased", from, posItem.Height)
 			}
@@ -75,19 +92,24 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 	} else {
 		posItem, exist := EthPosTable.UnbondPosItemMap[from]
 		if exist {
-			if IsUnlockTx(to) {
+			if to != nil && IsUnlockTx(*to) {
 				return fmt.Errorf("signer %X already unbonded at height %d", from, posItem.Height)
-			} else if IsLockTx(to) {
+			} else if to != nil && IsLockTx(*to) {
 				return fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			} else {
 				return fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			}
 		} else {
-			if IsUnlockTx(to) {
+			if to != nil && IsUnlockTx(*to) {
 				return fmt.Errorf("signer %X has not bonded ", from)
-			} else if IsLockTx(to) { //first lock
-				tmpInt := big.NewInt(0)
-				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+			} else if to != nil && IsLockTx(*to) { //first lock
+				currentSlots := int64(0)
+				if height < UpgradeHeight {
+					tmpInt := big.NewInt(0)
+					currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+				} else {
+					currentSlots = int64(10)
+				}
 				if 1 > currentSlots {
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return fmt.Errorf("signer %X doesn't have one slot of money", from)
@@ -126,24 +148,29 @@ func IsBlocked(from, to common.Address, balance *big.Int, txDataBytes []byte) (e
 	return nil
 }
 
-func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
-	if EthPosTable == nil { //should not happen
+func DoBetFilter(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
+	if EthPosTable == nil {
 		fmt.Printf("PosTable has not created yet")
 		return false, ErrPosTableNotCreate
 	}
 	EthPosTable.Mtx.Lock()
 	defer EthPosTable.Mtx.Unlock()
-	if !EthPosTable.InitFlag { //should not happen
+	if !EthPosTable.InitFlag {
 		fmt.Printf("PosTable has not init yet")
 		return false, ErrPosTableNotInit
 	}
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {
-		if IsUnlockTx(to) {
+		if to != nil && IsUnlockTx(*to) {
 			return true, EthPosTable.RemovePosItem(from, height, false)
-		} else if IsLockTx(to) { //relock
-			tmpInt := big.NewInt(0)
-			currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+		} else if to != nil && IsLockTx(*to) { //relock
+			currentSlots := int64(0)
+			if height < UpgradeHeight {
+				tmpInt := big.NewInt(0)
+				currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+			} else {
+				currentSlots = int64(10)
+			}
 			if posItem.Slots >= currentSlots {
 				fmt.Printf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
 				return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
@@ -182,10 +209,10 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 	} else {
 		posItem, exist := EthPosTable.UnbondPosItemMap[from]
 		if exist {
-			if IsUnlockTx(to) {
+			if to != nil && IsUnlockTx(*to) {
 				fmt.Printf("signer %X already unbonded at height %d", from, posItem.Height)
 				return true, fmt.Errorf("signer %X already unbonded at height %d", from, posItem.Height)
-			} else if IsLockTx(to) {
+			} else if to != nil && IsLockTx(*to) {
 				fmt.Printf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 				return true, fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			} else {
@@ -193,10 +220,10 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 				return false, fmt.Errorf("signer %X unbonded at height %d . will available at height %d", from, posItem.Height, (posItem.Height/EpochBlocks+UnbondWaitEpochs)*EpochBlocks)
 			}
 		} else {
-			if IsUnlockTx(to) {
+			if to != nil && IsUnlockTx(*to) {
 				fmt.Printf("signer %X has not bonded ", from)
 				return true, fmt.Errorf("signer %X has not bonded ", from)
-			} else if IsLockTx(to) { //first lock
+			} else if to != nil && IsLockTx(*to) { //first lock
 				txData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
 					return true, err
@@ -222,8 +249,13 @@ func DoFilter(from, to common.Address, balance *big.Int, txDataBytes []byte, hei
 					fmt.Printf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
-				tmpInt := big.NewInt(0)
-				currentSlots := tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+				currentSlots := int64(0)
+				if height < UpgradeHeight {
+					tmpInt := big.NewInt(0)
+					currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+				} else {
+					currentSlots = int64(10)
+				}
 				if 1 > currentSlots {
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)

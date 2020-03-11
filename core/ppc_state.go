@@ -404,16 +404,6 @@ func BytesToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&sh))
 }
 
-// rlp decode an etherum transaction
-func PPCDecodeTx(txBytes []byte) (*types.Transaction, error) {
-	tx := new(types.Transaction)
-	rlpStream := rlp.NewStream(bytes.NewBuffer(txBytes), 0)
-	if err := tx.DecodeRLP(rlpStream); err != nil {
-		return nil, err
-	}
-	return tx, nil
-}
-
 func PPCIllegalForm(from, to common.Address, balance *big.Int, txDataBytes []byte, currHeight uint64, statedb *state.StateDB) (err error) {
 	//verify whether the ppc-approved data is valid
 	if txfilter.IsPPChainAdmin(from) && txfilter.IsPPCCATableAccount(to) {

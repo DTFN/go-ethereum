@@ -23,11 +23,11 @@ import (
 
 // TxPreEvent is posted when a transaction enters the transaction pool.
 type TxPreEvent struct {
-	Tx           *types.Transaction
-	From         common.Address
-	RelayAddress common.Address
-	RelayTxFlag  bool
-	Result       chan error
+	Tx      *types.Transaction
+	From    common.Address
+	Relayer common.Address
+	SubTx   *types.Transaction  //not empty if it is a relayer tx
+	Result  chan error
 }
 
 // PendingLogsEvent is posted pre mining and notifies of pending logs.

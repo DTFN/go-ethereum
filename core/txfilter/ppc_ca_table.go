@@ -3,25 +3,50 @@ package txfilter
 import (
 	"github.com/ethereum/go-ethereum/common"
 	"sync"
+	"fmt"
 )
 
-type PPCCATable struct {
-	Mtx                  sync.RWMutex                      `json:"-"`
-	ChangedFlagThisBlock bool                              `json:"-"`
-	PPCCATableItemMap    map[common.Address]PPCCATableItem `json:"ppc_ca_talbe_item_map"`
+var (
+	EthPermitTable *PermitTable
+)
+
+type PermitTable struct {
+	Mtx                  sync.RWMutex                   `json:"-"`
+	ChangedFlagThisBlock bool                           `json:"-"`
+	PermitItemMap        map[common.Address]*PermitItem `json:"permit_item_map"`
 }
 
-
-type PPCCATableItem struct {
-	ApprovedTxDataHash string `json:"approved_tx_data_hash"`
-	StartHeight        uint64 `json:"start_height"`
-	EndHeight          uint64 `json:"end_height"`
-	Used               bool   `json:"used"`
+type PermitItem struct {
+	ApprovedTxDataHash []byte `json:"approved_tx_data_hash"`
+	PermitHeight       int64  `json:"permit_height"`
+	StartHeight        int64  `json:"start_height"`
+	EndHeight          int64  `json:"end_height"`
 }
 
-func NewPPCCATable() PPCCATable {
-	return PPCCATable{
+func NewPermitTable() PermitTable {
+	return PermitTable{
 		ChangedFlagThisBlock: false,
-		PPCCATableItemMap:    make(map[common.Address]PPCCATableItem),
+		PermitItemMap:        make(map[common.Address]*PermitItem),
 	}
+}
+
+func (permitTable *PermitTable) InsertPermitItem(permittedAddr common.Address, pi *PermitItem) error {
+	fmt.Printf("insert pmi %v for permittedAddr %X", pi, permittedAddr)
+	permitTable.ChangedFlagThisBlock = true
+	if _, ok := permitTable.PermitItemMap[permittedAddr]; ok {
+		return fmt.Errorf("InsertPermitItem, permittedAddr %X already exist", permittedAddr)
+	}
+	permitTable.PermitItemMap[permittedAddr] = pi
+	return nil
+}
+
+func (permitTable *PermitTable) DeletePermitItem(permittedAddr common.Address) error {
+	fmt.Printf("delete pmi for permittedAddr %X", permittedAddr)
+	if _, ok := permitTable.PermitItemMap[permittedAddr]; !ok {
+		fmt.Printf("DeletePermitItem, permittedAddr %X does not exist \n", permittedAddr)
+		return fmt.Errorf("DeletePermitItem, permittedAddr %X does not exist \n", permittedAddr)
+	}
+	permitTable.ChangedFlagThisBlock = true
+	delete(permitTable.PermitItemMap, permittedAddr)
+	return nil
 }
