@@ -86,12 +86,17 @@ func ApplyTransactionFacade(config *params.ChainConfig, bc *BlockChain, author *
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
+	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas,  cfg)
 	return r, msg, u, e
 }
 
-func ApplyTransactionWithFrom(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, from common.Address, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
-	msg, _ := tx.AsMessageWithFrom(from)
+func ApplyTransactionWithInfo(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, appVersion uint64, txInfo types.TxInfo, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
+	var msg Message
+	if txInfo.SubTx == nil {
+		msg, _ = tx.AsMessageWithFrom(txInfo.From, appVersion)
+	} else { //relay tx
+		msg, _ = txInfo.SubTx.AsMessageWithFrom(txInfo.RelayFrom, appVersion)
+	}
 	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
 	return r, msg, u, e
 }
@@ -108,7 +113,7 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	return applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
 }
 
-func applyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg types.Message, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
+func applyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg Message, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information

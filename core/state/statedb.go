@@ -655,21 +655,38 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 }
 
 func (db *StateDB) InitPosTable() (*txfilter.PosTable) {
-	nextEpochDataAddress := common.HexToAddress("0x8888888888888888888888888888888888888888")
+	nextEpochDataAddress := txfilter.SendToUnlock
 	log.Info("Read NextEpochValData")
 	nextBytes := db.GetCode(nextEpochDataAddress)
+	txfilter.CreatePosTable()
 	if len(nextBytes) == 0 {
 		// no predata existed
-		log.Info("no pre NextEpochValData.PosTable")
-		return nil
+		panic("no pre NextEpochValData.PosTable")
 	} else {
 		log.Info("NextEpochValData.PosTable Not nil")
-		txfilter.CreatePosTable()
 		err := json.Unmarshal(nextBytes, txfilter.EthPosTable)
 		if err != nil {
 			panic(fmt.Sprintf("initialize NextEpochValData.PosTable error %v", err))
 		}
-		return txfilter.EthPosTable
 	}
+	return txfilter.EthPosTable
+}
 
+func (db *StateDB) InitPermitTable() (*txfilter.PermitTable) {
+	permitTableDataAddress := txfilter.SendToAuth
+	log.Info("Read PermitTable")
+	nextBytes := db.GetCode(permitTableDataAddress)
+	txfilter.CreatePermitTable()
+	if len(nextBytes) == 0 {
+		// no predata existed
+		panic("no pre PermitTable")
+	} else {
+		log.Info("PermitTable Not nil")
+		txfilter.CreatePosTable()
+		err := json.Unmarshal(nextBytes, txfilter.EthPermitTable)
+		if err != nil {
+			panic(fmt.Sprintf("initialize NextEpochValData.PosTable error %v", err))
+		}
+	}
+	return txfilter.EthPermitTable
 }

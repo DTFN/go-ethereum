@@ -4,9 +4,7 @@ import (
 	"errors"
 	"bytes"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"fmt"
-	"math/big"
 )
 
 var (
@@ -22,39 +20,6 @@ var (
 	Bigguy       common.Address
 )
 
-//signed data: rlp(subTransaction fields + from)
-func DeriveRelayer(from common.Address, txDataBytes []byte) (subTx *types.Transaction, relayer common.Address, err error) {
-	subTx, err = types.DecodeTx(txDataBytes)
-	if err != nil {
-		return subTx, common.Address{}, fmt.Errorf("ppc tx data is not a subTx structure. %v", err)
-	}
-	var signer types.Signer = types.HomesteadSigner{}
-	if subTx.Protected() {
-		signer = types.NewEIP155Signer(subTx.ChainId())
-	}
-	relayer, err = signer.RelaySender(subTx, from)
-	return
-}
-
-func CheckRelayerTx(tx, subTx *types.Transaction) (err error) {
-	if tx.Nonce() != subTx.Nonce() {
-		fmt.Printf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
-		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
-	}
-	if tx.Value() != subTx.Value() {
-		fmt.Printf("tx value %v not equal to sub tx value %v", tx.Value(), subTx.Value())
-		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Value(), subTx.Value())
-	}
-	if tx.GasPrice() != subTx.GasPrice() {
-		fmt.Printf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
-		return fmt.Errorf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
-	}
-	if tx.Gas() != subTx.Gas() {
-		fmt.Printf("tx gasLimit %v not equal to sub tx gasLimit %v", tx.Gas(), subTx.Gas())
-		return fmt.Errorf("tx gasLimit %v not equal to sub tx gasLimit %v", tx.Gas(), subTx.Gas())
-	}
-}
-
 func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err error) {
 	var ppcdata AuthData
 	ppcdata, err = UnMarshalPermitTxData(txDataBytes)
@@ -62,7 +27,7 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err e
 		fmt.Printf("admin %X sent an auth tx with illegal format \n", from)
 		return fmt.Errorf("admin %X sent an auth tx with illegal format \n", from)
 	}
-	if EthPermitTable == nil {
+	if EthPermitTable == nil || !EthPermitTable.Init {
 		return ErrPermitTableNotCreate
 	}
 	EthPermitTable.Mtx.RLock()
@@ -98,14 +63,14 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err e
 	return fmt.Errorf("admin %X sent an unrecognized OperationType %v \n", from, ppcdata.OperationType)
 }
 
-func DoAuthHandle(from, to common.Address, balance *big.Int, txDataBytes []byte, height int64) (err error) {
+func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err error) {
 	var ppcdata AuthData
 	ppcdata, err = UnMarshalPermitTxData(txDataBytes)
 	if err != nil {
 		fmt.Printf("admin %X sent an auth tx with illegal format \n", from)
 		return fmt.Errorf("admin %X sent an auth tx with illegal format \n", from)
 	}
-	if EthPermitTable == nil {
+	if EthPermitTable == nil || !EthPermitTable.Init {
 		return ErrPermitTableNotCreate
 	}
 	EthPermitTable.Mtx.Lock()

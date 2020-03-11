@@ -209,7 +209,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 
 	if st.evm.BlockNumber.Int64() <= 3588000 {
 		if contractCreation {
-			vmerr := txfilter.IsBlocked(msg.From(), common.Address{}, st.state.GetBalance(msg.From()), msg.Data())
+			vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil {
 				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 			} else {
@@ -218,14 +218,14 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		} else {
 			// Increment the nonce for the next transaction
 			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-			isBetTx, vmerr := txfilter.DoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+			isBetTx, vmerr := txfilter.DoBetFilter(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil && !isBetTx {
 				ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 			}
 		}
 	} else {
 		if contractCreation {
-			vmerr = txfilter.IsBlocked(msg.From(), common.Address{}, st.state.GetBalance(msg.From()), msg.Data())
+			vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil {
 				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 			} else {
@@ -235,9 +235,18 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 			// Increment the nonce for the next transaction
 			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 			isBetTx := false
-			isBetTx, vmerr = txfilter.DoFilter(msg.From(), *msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+			isBetTx, vmerr = txfilter.DoBetFilter(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 			if vmerr == nil && !isBetTx {
-				ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+				if txfilter.IsAuthTx(*msg.To()) {
+					vmerr = txfilter.DoAuthHandle(msg.From(), msg.Data(), st.evm.BlockNumber.Int64())
+				} else if txfilter.IsMintTx(*msg.To()) {
+					vmerr = txfilter.IsMintBlocked(msg.From())
+					if vmerr == nil {
+						st.state.AddBalance(msg.From(), msg.Value()) //mint the money for the bigguy
+					}
+				} else {
+					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+				}
 			}
 		}
 	}

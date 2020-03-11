@@ -28,6 +28,9 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"bytes"
+	"github.com/ethereum/go-ethereum/core/txfilter"
+	"encoding/hex"
+	"fmt"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
@@ -234,7 +237,7 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 	return msg, err
 }
 
-func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
+func (tx *Transaction) AsMessageWithFrom(from common.Address, appVersion uint64) (Message, error) {
 	msg := Message{
 		nonce:      tx.data.AccountNonce,
 		gasLimit:   tx.data.GasLimit,
@@ -245,7 +248,11 @@ func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
 		data:       tx.data.Payload,
 		checkNonce: true,
 	}
-
+	if appVersion >= 4 { //wipe the transfer to 0 except bigguy and admin. We are coin-free chain!
+		if !bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && !bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) {
+			msg.amount = big.NewInt(0)
+		}
+	}
 	return msg, nil
 }
 
@@ -443,3 +450,49 @@ func (m Message) Gas() uint64          { return m.gasLimit }
 func (m Message) Nonce() uint64        { return m.nonce }
 func (m Message) Data() []byte         { return m.data }
 func (m Message) CheckNonce() bool     { return m.checkNonce }
+
+//==============================
+type TxInfo struct {
+	Tx        *Transaction
+	From      common.Address
+	SubTx     *Transaction
+	RelayFrom common.Address
+}
+
+//signed data: rlp(subTransaction fields + from)
+func DeriveRelayer(from common.Address, txDataBytes []byte) (subTx *Transaction, relayer common.Address, err error) {
+	n, err := hex.Decode(txDataBytes, txDataBytes)
+	if err != nil {
+		return subTx, common.Address{}, fmt.Errorf("ppc tx data is not hex bytes. %v", err)
+	}
+	subTx, err = DecodeTx(txDataBytes[:n])
+	if err != nil {
+		return subTx, common.Address{}, fmt.Errorf("ppc tx data is not a subTx structure. %v", err)
+	}
+	var signer Signer = HomesteadSigner{}
+	if subTx.Protected() {
+		signer = NewEIP155Signer(subTx.ChainId())
+	}
+	relayer, err = signer.RelaySender(subTx, from)
+	return
+}
+
+func CheckRelayerTx(tx, subTx *Transaction) (err error) {
+	if tx.Nonce() != subTx.Nonce() {
+		fmt.Printf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
+		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
+	}
+	if tx.Value() != subTx.Value() {
+		fmt.Printf("tx value %v not equal to sub tx value %v", tx.Value(), subTx.Value())
+		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Value(), subTx.Value())
+	}
+	if tx.GasPrice() != subTx.GasPrice() {
+		fmt.Printf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
+		return fmt.Errorf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
+	}
+	if tx.Gas() != subTx.Gas() {
+		fmt.Printf("tx gasLimit %v not equal to sub tx gasLimit %v", tx.Gas(), subTx.Gas())
+		return fmt.Errorf("tx gasLimit %v not equal to sub tx gasLimit %v", tx.Gas(), subTx.Gas())
+	}
+	return
+}

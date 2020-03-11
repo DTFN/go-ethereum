@@ -315,42 +315,21 @@ func (l *txList) Filter(costLimit *big.Int, gasLimit uint64) (types.Transactions
 	return removed, invalids
 }
 
-func (l *txList) Filter_relay(costLimit *big.Int, pool *TxPool, gasLimit uint64) (types.Transactions, types.Transactions) {
-	useOldFilterLogic := true
-	for _, item := range l.txs.items {
-		if item.To() != nil {
-			if bytes.Equal(item.To().Bytes(), txfilter.RelayAddress.Bytes()) {
-				useOldFilterLogic = false
-				break
-			}
-		}
-	}
+func (l *txList) Filter_relay(costLimit *big.Int, pool *TxPool, gasLimit uint64) (removed types.Transactions, invalids types.Transactions) {
 	// If all transactions are below the threshold, short circuit
-
-	if useOldFilterLogic {
-		if l.costcap.Cmp(costLimit) <= 0 && l.gascap <= gasLimit {
-			return nil, nil
-		}
-	}
 	l.costcap = new(big.Int).Set(costLimit) // Lower the caps to the thresholds
 	l.gascap = gasLimit
 
+
 	// Filter out all the transactions above the account's funds
-	removed := l.txs.Filter(func(tx *types.Transaction) bool {
-		if tx.To() != nil {
-			if bytes.Equal(tx.To().Bytes(), txfilter.RelayAddress.Bytes()) {
-				relayTxData, err := txfilter.ClientUnMarshalTxData(tx.Data())
-				if err == nil {
-					relayerAddress := common.HexToAddress(relayTxData.RelayerAddress)
-					return tx.Cost().Cmp(pool.currentState.GetBalance(relayerAddress)) > 0 || tx.Gas() > gasLimit
-				}
-			}
+	removed = l.txs.Filter(func(tx *types.Transaction) bool {
+		if tx.To() != nil && bytes.Equal(tx.To().Bytes(), txfilter.SendToRelay.Bytes()) {
+				return tx.Cost().Cmp(pool.currentState.GetBalance(pool.relayTxInfo[tx.Hash()].RelayFrom)) > 0 || tx.Gas() > gasLimit
 		}
 		return tx.Cost().Cmp(costLimit) > 0 || tx.Gas() > gasLimit
 	})
 
 	// If the list was strict, filter anything above the lowest nonce
-	var invalids types.Transactions
 
 	if l.strict && len(removed) > 0 {
 		lowest := uint64(math.MaxUint64)

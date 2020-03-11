@@ -14,6 +14,7 @@ type PermitTable struct {
 	Mtx                  sync.RWMutex                   `json:"-"`
 	ChangedFlagThisBlock bool                           `json:"-"`
 	PermitItemMap        map[common.Address]*PermitItem `json:"permit_item_map"`
+	Init                 bool                           `json:"-"`
 }
 
 type PermitItem struct {
@@ -23,8 +24,16 @@ type PermitItem struct {
 	EndHeight          int64  `json:"end_height"`
 }
 
-func NewPermitTable() PermitTable {
-	return PermitTable{
+func CreatePermitTable() *PermitTable {
+	if EthPermitTable != nil {
+		panic("txfilter.EthPermitTable already exist")
+	}
+	EthPermitTable = NewPermitTable()
+	return EthPermitTable
+}
+
+func NewPermitTable() *PermitTable {
+	return &PermitTable{
 		ChangedFlagThisBlock: false,
 		PermitItemMap:        make(map[common.Address]*PermitItem),
 	}

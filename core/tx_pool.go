@@ -662,11 +662,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	//valid signature
 	if to != nil {
 		if txfilter.IsRelayTx(*to) {
-			subTx, relayer, err := txfilter.DeriveRelayer(from, tx.Data())
+			subTx, relayer, err := types.DeriveRelayer(from, tx.Data())
 			if err != nil {
 				return err
 			}
-			err = txfilter.CheckRelayerTx(tx, subTx)
+			err = types.CheckRelayerTx(tx, subTx)
 			if err != nil {
 				return err
 			}

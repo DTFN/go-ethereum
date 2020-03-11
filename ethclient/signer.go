@@ -51,6 +51,16 @@ func (s *senderFromServer) Sender(tx *types.Transaction) (common.Address, error)
 	return s.addr, nil
 }
 
+func (s *senderFromServer) RelaySender(tx *types.Transaction, from common.Address) (common.Address, error) {
+	if s.blockhash == (common.Hash{}) {
+		return common.Address{}, errNotCached
+	}
+	return s.addr, nil
+}
+
+func (s senderFromServer) HashWithFrom(tx *types.Transaction, from common.Address) common.Hash {
+	panic("can't sign with senderFromServer")
+}
 func (s *senderFromServer) Hash(tx *types.Transaction) common.Hash {
 	panic("can't sign with senderFromServer")
 }

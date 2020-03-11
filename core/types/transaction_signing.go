@@ -255,6 +255,10 @@ func (fs FrontierSigner) HashWithFrom(tx *Transaction, from common.Address) comm
 	})
 }
 
+func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
+	return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
+}
+
 func (fs FrontierSigner) RelaySender(tx *Transaction, from common.Address) (common.Address, error) {
 	return recoverPlain(fs.HashWithFrom(tx, from), tx.data.R, tx.data.S, tx.data.V, false)
 }
