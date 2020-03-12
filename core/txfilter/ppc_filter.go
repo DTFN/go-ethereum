@@ -27,33 +27,37 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err e
 		fmt.Printf("admin %X sent an auth tx with illegal format \n", from)
 		return fmt.Errorf("admin %X sent an auth tx with illegal format \n", from)
 	}
-	if EthPermitTable == nil || !EthPermitTable.Init {
+	if EthPosTable == nil {
+		return ErrPosTableNotCreate
+	}
+	if EthAuthTable == nil{
 		return ErrPermitTableNotCreate
 	}
-	EthPermitTable.Mtx.RLock()
+	EthPosTable.Mtx.RLock()
+	defer EthPosTable.Mtx.RUnlock()
+	if !EthPosTable.InitFlag {
+		return ErrPosTableNotInit
+	}
+
 	if ppcdata.OperationType == "add" {
-		permitItem, exist := EthPermitTable.PermitItemMap[ppcdata.PermittedAddress]
+		authItem, exist := EthAuthTable.AuthItemMap[ppcdata.PermittedAddress]
 		if exist {
-			EthPermitTable.Mtx.RUnlock()
-			fmt.Printf("addr %X already permitted at height %d , permit range [%v,%v]", ppcdata.PermittedAddress, permitItem.PermitHeight, permitItem.StartHeight, permitItem.EndHeight)
-			return fmt.Errorf("addr %X already permitted at height %d , permit range [%v,%v]", ppcdata.PermittedAddress, permitItem.PermitHeight, permitItem.StartHeight, permitItem.EndHeight)
+			fmt.Printf("addr %X already permitted at height %d , auth range [%v,%v] auth hash %X", ppcdata.PermittedAddress, authItem.PermitHeight, authItem.StartHeight, authItem.EndHeight,authItem.ApprovedTxDataHash)
+			return fmt.Errorf("addr %X already permitted at height %d , auth range [%v,%v] auth hash %X", ppcdata.PermittedAddress, authItem.PermitHeight, authItem.StartHeight, authItem.EndHeight,authItem.ApprovedTxDataHash)
 		} else {
-			if _, exist := EthPermitTable.PermitItemMap[ppcdata.PermittedAddress]; exist {
-				return fmt.Errorf("insertPermitItem in auth check, permittedAddr %X already exist", ppcdata.PermittedAddress)
+			_, exist := EthPosTable.PosItemMap[ppcdata.PermittedAddress]
+			if exist {
+				fmt.Printf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
+				return fmt.Errorf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
 			}
-			EthPermitTable.Mtx.RUnlock()
 			return
 		}
 	} else if ppcdata.OperationType == "remove" {
-		if _, exist := EthPermitTable.PermitItemMap[ppcdata.PermittedAddress]; !exist {
+		if _, exist := EthAuthTable.AuthItemMap[ppcdata.PermittedAddress]; !exist {
 			return fmt.Errorf("removePermitItem in auth check, permittedAddr %X not exists", ppcdata.PermittedAddress)
 		}
-		EthPermitTable.Mtx.RUnlock()
 		return
 	} else if ppcdata.OperationType == "kickout" {
-		EthPermitTable.Mtx.RUnlock()
-		EthPosTable.Mtx.RLock()
-		defer EthPosTable.Mtx.RUnlock()
 		if _, ok := EthPosTable.PosItemMap[ppcdata.PermittedAddress]; !ok {
 			fmt.Printf("admin %X wants to kickout %X, but it is not in the PosTable \n", from, ppcdata.PermittedAddress)
 			return fmt.Errorf("admin %X wants to kickout %X, but it is not in the PosTable \n", from, ppcdata.PermittedAddress)
@@ -70,33 +74,41 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err er
 		fmt.Printf("admin %X sent an auth tx with illegal format \n", from)
 		return fmt.Errorf("admin %X sent an auth tx with illegal format \n", from)
 	}
-	if EthPermitTable == nil || !EthPermitTable.Init {
+	if EthPosTable == nil {
+		return ErrPosTableNotCreate
+	}
+	if EthAuthTable == nil{
 		return ErrPermitTableNotCreate
 	}
-	EthPermitTable.Mtx.Lock()
+	EthPosTable.Mtx.Lock()
+	defer EthPosTable.Mtx.Unlock()
+	if !EthPosTable.InitFlag {
+		return ErrPosTableNotInit
+	}
 	if ppcdata.OperationType == "add" {
-		permitItem, exist := EthPermitTable.PermitItemMap[ppcdata.PermittedAddress]
+		authItem, exist := EthAuthTable.AuthItemMap[ppcdata.PermittedAddress]
 		if exist {
-			EthPermitTable.Mtx.Unlock()
-			fmt.Printf("addr %X already permitted at height %d , permit range [%v,%v]", ppcdata.PermittedAddress, permitItem.PermitHeight, permitItem.StartHeight, permitItem.EndHeight)
-			return fmt.Errorf("addr %X already permitted at height %d , permit range [%v,%v]", ppcdata.PermittedAddress, permitItem.PermitHeight, permitItem.StartHeight, permitItem.EndHeight)
+			fmt.Printf("addr %X already permitted at height %d , auth range [%v,%v] auth hash %X", ppcdata.PermittedAddress, authItem.PermitHeight, authItem.StartHeight, authItem.EndHeight,authItem.ApprovedTxDataHash)
+			return fmt.Errorf("addr %X already permitted at height %d , auth range [%v,%v] auth hash %X", ppcdata.PermittedAddress, authItem.PermitHeight, authItem.StartHeight, authItem.EndHeight,authItem.ApprovedTxDataHash)
 		} else {
-			permitItem = &PermitItem{
+			_, exist := EthPosTable.PosItemMap[ppcdata.PermittedAddress]
+			if exist {
+				fmt.Printf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
+				return fmt.Errorf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
+			}
+			authItem = &AuthItem{
 				ApprovedTxDataHash: ppcdata.ApprovedTxDataHash,
 				StartHeight:        ppcdata.StartBlockHeight,
 				EndHeight:          ppcdata.EndBlockHeight,
 				PermitHeight:       height,
 			}
-			err = EthPermitTable.InsertPermitItem(ppcdata.PermittedAddress, permitItem)
-			EthPermitTable.Mtx.Unlock()
+			err = EthAuthTable.InsertPermitItem(ppcdata.PermittedAddress, authItem)
 			return
 		}
 	} else if ppcdata.OperationType == "remove" {
-		err = EthPermitTable.DeletePermitItem(ppcdata.PermittedAddress)
-		EthPermitTable.Mtx.Unlock()
+		err = EthAuthTable.DeletePermitItem(ppcdata.PermittedAddress)
 		return
 	} else if ppcdata.OperationType == "kickout" {
-		EthPermitTable.Mtx.Unlock()
 		EthPosTable.Mtx.Lock()
 		defer EthPosTable.Mtx.Unlock()
 		return EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false)

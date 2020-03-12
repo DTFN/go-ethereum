@@ -7,6 +7,8 @@ import (
 	tmTypes "github.com/tendermint/tendermint/types"
 	"math/big"
 	"strings"
+	"bytes"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 var (
@@ -40,6 +42,9 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 	if EthPosTable == nil {
 		return ErrPosTableNotCreate
 	}
+	if EthAuthTable == nil {
+		return ErrPermitTableNotCreate
+	}
 	EthPosTable.Mtx.RLock()
 	defer EthPosTable.Mtx.RUnlock()
 	if !EthPosTable.InitFlag {
@@ -49,13 +54,24 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 	if exist {
 		if to != nil && IsUnlockTx(*to) {
 			return EthPosTable.CanRemovePosItem()
-		} else if to != nil && IsLockTx(*to) {
+		} else if to != nil && IsLockTx(*to) { //relock
 			currentSlots := int64(0)
 			if height < UpgradeHeight {
 				tmpInt := big.NewInt(0)
 				currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 			} else {
-				currentSlots = int64(10)
+				return fmt.Errorf("signer %X is already in PosTable. and it is after ppchain upgrade, no need to relock", from)
+				/*authItem, found := EthAuthTable.AuthItemMap[from]
+				if !found {
+					return fmt.Errorf("signer %X authItem not found in AuthTable", from)
+				}
+				if height < authItem.StartHeight {
+					return fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
+				}
+				if height > authItem.EndHeight {
+					return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.StartHeight)
+				}
+				currentSlots = int64(10)*/
 			}
 			if posItem.Slots >= currentSlots {
 				return fmt.Errorf("signer %X already bonded at height %d ,balance has not increased", from, posItem.Height)
@@ -108,6 +124,20 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 					tmpInt := big.NewInt(0)
 					currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 				} else {
+					authItem, found := EthAuthTable.AuthItemMap[from]
+					if !found {
+						return fmt.Errorf("signer %X authItem not found in AuthTable", from)
+					}
+					if height < authItem.StartHeight {
+						return fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
+					}
+					if height > authItem.EndHeight {
+						return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.StartHeight)
+					}
+					if tmHash := crypto.Keccak256(txDataBytes); !bytes.Equal(tmHash, authItem.ApprovedTxDataHash) {
+						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
+						return fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
+					}
 					currentSlots = int64(10)
 				}
 				if 1 > currentSlots {
@@ -152,11 +182,16 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 
 func DoBetFilter(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
 	if EthPosTable == nil {
-		fmt.Printf("PosTable has not created yet")
 		return false, ErrPosTableNotCreate
+	}
+	if EthAuthTable == nil {
+		return false, ErrPermitTableNotCreate
 	}
 	EthPosTable.Mtx.Lock()
 	defer EthPosTable.Mtx.Unlock()
+	if !EthPosTable.InitFlag {
+		return false, ErrPosTableNotInit
+	}
 	if !EthPosTable.InitFlag {
 		fmt.Printf("PosTable has not init yet")
 		return false, ErrPosTableNotInit
@@ -171,7 +206,8 @@ func DoBetFilter(from common.Address, to *common.Address, balance *big.Int, txDa
 				tmpInt := big.NewInt(0)
 				currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 			} else {
-				currentSlots = int64(10)
+				return true, fmt.Errorf("signer %X is already in PosTable. and it is after ppchain upgrade, no need to relock", from)
+				//currentSlots = int64(10)
 			}
 			if posItem.Slots >= currentSlots {
 				fmt.Printf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
@@ -256,6 +292,16 @@ func DoBetFilter(from common.Address, to *common.Address, balance *big.Int, txDa
 					tmpInt := big.NewInt(0)
 					currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
 				} else {
+					authItem, found := EthAuthTable.AuthItemMap[from]
+					if !found {
+						return true, fmt.Errorf("signer %X authItem not found in AuthTable", from)
+					}
+					if height < authItem.StartHeight {
+						return true, fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
+					}
+					if height > authItem.EndHeight {
+						return true, fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.StartHeight)
+					}
 					currentSlots = int64(10)
 				}
 				if 1 > currentSlots {

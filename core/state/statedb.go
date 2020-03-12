@@ -672,21 +672,21 @@ func (db *StateDB) InitPosTable() (*txfilter.PosTable) {
 	return txfilter.EthPosTable
 }
 
-func (db *StateDB) InitPermitTable() (*txfilter.PermitTable) {
+func (db *StateDB) InitAuthTable() (*txfilter.AuthTable) {
 	permitTableDataAddress := txfilter.SendToAuth
 	log.Info("Read PermitTable")
 	nextBytes := db.GetCode(permitTableDataAddress)
-	txfilter.CreatePermitTable()
+	txfilter.CreateAuthTable()
 	if len(nextBytes) == 0 {
 		// no predata existed
-		panic("no pre PermitTable")
+		panic("no pre AuthTable")
 	} else {
-		log.Info("PermitTable Not nil")
-		txfilter.CreatePosTable()
-		err := json.Unmarshal(nextBytes, txfilter.EthPermitTable)
+		log.Info("AuthTable Not nil")
+		txfilter.CreateAuthTable()
+		err := json.Unmarshal(nextBytes, txfilter.AuthTable{})
 		if err != nil {
-			panic(fmt.Sprintf("initialize NextEpochValData.PosTable error %v", err))
+			panic(fmt.Sprintf("initialize AuthTable error %v", err))
 		}
 	}
-	return txfilter.EthPermitTable
+	return txfilter.EthAuthTable
 }
