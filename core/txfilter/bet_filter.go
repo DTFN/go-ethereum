@@ -7,8 +7,8 @@ import (
 	tmTypes "github.com/tendermint/tendermint/types"
 	"math/big"
 	"strings"
-	"bytes"
 	"github.com/ethereum/go-ethereum/crypto"
+	"bytes"
 )
 
 var (
@@ -43,7 +43,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 		return ErrPosTableNotCreate
 	}
 	if EthAuthTable == nil {
-		return ErrPermitTableNotCreate
+		return ErrAuthTableNotCreate
 	}
 	EthPosTable.Mtx.RLock()
 	defer EthPosTable.Mtx.RUnlock()
@@ -138,6 +138,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
 						return fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
 					}
+					delete(EthAuthTable.AuthItemMap, from)
 					currentSlots = int64(10)
 				}
 				if 1 > currentSlots {
@@ -185,7 +186,7 @@ func DoBetFilter(from common.Address, to *common.Address, balance *big.Int, txDa
 		return false, ErrPosTableNotCreate
 	}
 	if EthAuthTable == nil {
-		return false, ErrPermitTableNotCreate
+		return false, ErrAuthTableNotCreate
 	}
 	EthPosTable.Mtx.Lock()
 	defer EthPosTable.Mtx.Unlock()
@@ -303,6 +304,7 @@ func DoBetFilter(from common.Address, to *common.Address, balance *big.Int, txDa
 						return true, fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.StartHeight)
 					}
 					currentSlots = int64(10)
+					delete(EthAuthTable.AuthItemMap, from)	//delete the auth item when it joins PosTable
 				}
 				if 1 > currentSlots {
 					fmt.Println("test1.1")
@@ -310,7 +312,7 @@ func DoBetFilter(from common.Address, to *common.Address, balance *big.Int, txDa
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
-				return true, EthPosTable.InsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))
+				return true, EthPosTable.InsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))  //this should succeed, otherwise authItem has to rollback
 			}
 		}
 	}

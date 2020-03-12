@@ -666,6 +666,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			if err != nil {
 				return err
 			}
+			fmt.Printf("txPool receives a relay tx, from %X relayer %X \n ", from, relayer)
+			fmt.Printf("tx %v subTx %v \n ", tx, subTx)
 			err = types.CheckRelayerTx(tx, subTx)
 			if err != nil {
 				return err

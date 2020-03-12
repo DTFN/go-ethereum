@@ -482,11 +482,11 @@ func CheckRelayerTx(tx, subTx *Transaction) (err error) {
 		fmt.Printf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
 		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
 	}
-	if tx.Value() != subTx.Value() {
+	if tx.Value().Cmp(subTx.Value()) != 0 {
 		fmt.Printf("tx value %v not equal to sub tx value %v", tx.Value(), subTx.Value())
-		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Value(), subTx.Value())
+		return fmt.Errorf("tx value %v not equal to sub tx value %v", tx.Value(), subTx.Value())
 	}
-	if tx.GasPrice() != subTx.GasPrice() {
+	if tx.GasPrice().Cmp(subTx.GasPrice()) != 0 {
 		fmt.Printf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
 		return fmt.Errorf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
 	}

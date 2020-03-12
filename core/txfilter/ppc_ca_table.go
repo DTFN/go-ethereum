@@ -35,7 +35,7 @@ func NewAuthTable() *AuthTable {
 	}
 }
 
-func (permitTable *AuthTable) InsertPermitItem(permittedAddr common.Address, pi *AuthItem) error {
+func (permitTable *AuthTable) InsertAuthItem(permittedAddr common.Address, pi *AuthItem) error {
 	fmt.Printf("insert pmi %v for permittedAddr %X", pi, permittedAddr)
 	EthPosTable.ChangedFlagThisBlock = true
 	if _, ok := permitTable.AuthItemMap[permittedAddr]; ok {
@@ -45,7 +45,7 @@ func (permitTable *AuthTable) InsertPermitItem(permittedAddr common.Address, pi 
 	return nil
 }
 
-func (permitTable *AuthTable) DeletePermitItem(permittedAddr common.Address) error {
+func (permitTable *AuthTable) DeleteAuthItem(permittedAddr common.Address) error {
 	fmt.Printf("delete pmi for permittedAddr %X", permittedAddr)
 	if _, ok := permitTable.AuthItemMap[permittedAddr]; !ok {
 		fmt.Printf("DeletePermitItem, permittedAddr %X does not exist \n", permittedAddr)

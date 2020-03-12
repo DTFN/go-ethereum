@@ -13,7 +13,7 @@ type AuthData struct {
 	ApprovedTxDataHash []byte         `json:"approved_tx_data_hash"`
 }
 
-func UnMarshalPermitTxData(jsonByte []byte) (AuthData, error) {
+func UnMarshalAuthTxData(jsonByte []byte) (AuthData, error) {
 	ppcdata := AuthData{}
 	err := json.Unmarshal(jsonByte, &ppcdata)
 	if err != nil {

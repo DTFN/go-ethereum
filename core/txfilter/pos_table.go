@@ -191,7 +191,7 @@ func (posTable *PosTable) InsertPosItem(signer common.Address, pi *PosItem) erro
 	fmt.Printf("signer %X insert pi %v", signer, pi)
 	posTable.ChangedFlagThisBlock = true
 	if _, ok := posTable.PosItemMap[signer]; ok {
-		panic(fmt.Sprintf("InsertPosItem, signer %X already exist"))
+		panic(fmt.Sprintf("InsertPosItem, signer %X already exist", signer))
 	}
 	posTable.PosItemMap[signer] = pi
 	posItemWithSigner := PosItemWithSigner{

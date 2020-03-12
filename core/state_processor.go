@@ -86,7 +86,7 @@ func ApplyTransactionFacade(config *params.ChainConfig, bc *BlockChain, author *
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas,  cfg)
+	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, nil)
 	return r, msg, u, e
 }
 
@@ -95,9 +95,9 @@ func ApplyTransactionWithInfo(config *params.ChainConfig, bc *BlockChain, author
 	if txInfo.SubTx == nil {
 		msg, _ = tx.AsMessageWithFrom(txInfo.From, appVersion)
 	} else { //relay tx
-		msg, _ = txInfo.SubTx.AsMessageWithFrom(txInfo.RelayFrom, appVersion)
+		msg, _ = txInfo.SubTx.AsMessageWithFrom(txInfo.From, appVersion)
 	}
-	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
+	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, &txInfo)
 	return r, msg, u, e
 }
 
@@ -110,17 +110,17 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	if err != nil {
 		return nil, 0, err
 	}
-	return applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg)
+	return applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, nil)
 }
 
-func applyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg Message, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
+func applyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, msg Message, usedGas *uint64, cfg vm.Config, txInfo *types.TxInfo) (*types.Receipt, uint64, error) {
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
 	// Apply the transaction to the current state (included in the env)
-	_, gas, failed, err := ApplyMessage(vmenv, msg, gp)
+	_, gas, failed, err := ApplyMessageWithInfo(vmenv, msg, gp, txInfo)
 	if err != nil {
 		return nil, 0, err
 	}
