@@ -21,6 +21,10 @@ var (
 )
 
 func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err error) {
+	if !bytes.Equal(from.Bytes(),PPChainAdmin.Bytes()){
+		fmt.Printf("not admin %X sent an auth tx \n", from)
+		return fmt.Errorf("not admin %X sent an auth tx \n", from)
+	}
 	var ppcdata AuthData
 	ppcdata, err = UnMarshalAuthTxData(txDataBytes)
 	if err != nil {
@@ -69,6 +73,10 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err e
 }
 
 func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err error) {
+	if !bytes.Equal(from.Bytes(),PPChainAdmin.Bytes()){
+		fmt.Printf("not admin %X sent an auth tx \n", from)
+		return fmt.Errorf("not admin %X sent an auth tx \n", from)
+	}
 	var ppcdata AuthData
 	ppcdata, err = UnMarshalAuthTxData(txDataBytes)
 	if err != nil {
@@ -105,7 +113,7 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err er
 				PermitHeight:       height,
 			}
 			err = EthAuthTable.InsertAuthItem(ppcdata.PermittedAddress, authItem)
-			fmt.Printf("=======after InsertPermitItem. %v", EthAuthTable)
+			fmt.Printf("=======after InsertAuthItem. %v", EthAuthTable)
 			return
 		}
 	} else if ppcdata.OperationType == "remove" {

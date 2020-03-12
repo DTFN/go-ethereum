@@ -138,7 +138,6 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
 						return fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
 					}
-					delete(EthAuthTable.AuthItemMap, from)
 					currentSlots = int64(10)
 				}
 				if 1 > currentSlots {
