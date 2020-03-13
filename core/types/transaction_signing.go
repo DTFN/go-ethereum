@@ -182,13 +182,14 @@ func (s EIP155Signer) Hash(tx *Transaction) common.Hash {
 
 func (s EIP155Signer) HashWithFrom(tx *Transaction, from common.Address) common.Hash {
 	return rlpHash([]interface{}{
+		from,
 		tx.data.AccountNonce,
 		tx.data.Price,
 		tx.data.GasLimit,
 		tx.data.Recipient,
 		tx.data.Amount,
 		tx.data.Payload,
-		s.chainId, uint(0), uint(0), from,
+		s.chainId, uint(0), uint(0),
 	})
 }
 
@@ -245,13 +246,13 @@ func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 
 func (fs FrontierSigner) HashWithFrom(tx *Transaction, from common.Address) common.Hash {
 	return rlpHash([]interface{}{
+		from,
 		tx.data.AccountNonce,
 		tx.data.Price,
 		tx.data.GasLimit,
 		tx.data.Recipient,
 		tx.data.Amount,
 		tx.data.Payload,
-		from,
 	})
 }
 
