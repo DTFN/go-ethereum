@@ -218,46 +218,67 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		// error.
 		vmerr error
 	)
-
-	if st.evm.BlockNumber.Int64() <= txfilter.UpgradeHeight {
-		if contractCreation {
-			vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-			if vmerr == nil {
-				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+	if txfilter.EthPosTable == nil {
+		vmerr = txfilter.ErrPosTableNotCreate
+	} else if txfilter.EthAuthTable == nil {
+		vmerr = txfilter.ErrAuthTableNotCreate
+	} else if !txfilter.EthPosTable.InitFlag {
+		vmerr = txfilter.ErrPosTableNotInit
+	}
+	if vmerr != nil {
+		if st.evm.BlockNumber.Int64() <= txfilter.UpgradeHeight {
+			if contractCreation {
+				txfilter.EthPosTable.Mtx.RLock()
+				vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+				txfilter.EthPosTable.Mtx.RUnlock()
+				if vmerr == nil {
+					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+				} else {
+					st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+				}
 			} else {
+				// Increment the nonce for the next transaction
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+				txfilter.EthPosTable.Mtx.Lock()
+				isBetTx, vmerr := txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+				txfilter.EthPosTable.Mtx.Unlock()
+				if vmerr == nil && !isBetTx {
+					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+				}
 			}
 		} else {
-			// Increment the nonce for the next transaction
-			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-			isBetTx, vmerr := txfilter.DoBetFilter(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-			if vmerr == nil && !isBetTx {
-				ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
-			}
-		}
-	} else {
-		if contractCreation {
-			vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-			if vmerr == nil {
-				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+			if contractCreation {
+				txfilter.EthPosTable.Mtx.RLock()
+				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+				txfilter.EthPosTable.Mtx.RUnlock()
+				if vmerr == nil {
+					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+				} else {
+					st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+				}
 			} else {
+				// Increment the nonce for the next transaction
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-			}
-		} else {
-			// Increment the nonce for the next transaction
-			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-			isBetTx := false
-			isBetTx, vmerr = txfilter.DoBetFilter(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-			if vmerr == nil && !isBetTx {
-				if txfilter.IsAuthTx(*msg.To()) {
-					vmerr = txfilter.DoAuthHandle(msg.From(), msg.Data(), st.evm.BlockNumber.Int64())
-				} else if txfilter.IsMintTx(*msg.To()) {
-					vmerr = txfilter.IsMintBlocked(msg.From())
-					if vmerr == nil {
-						st.state.AddBalance(msg.From(), msg.Value()) //mint the money for the bigguy
+				isBetTx := false
+				txfilter.EthPosTable.Mtx.Lock()
+				isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+				if vmerr == nil && !isBetTx {
+					if txfilter.IsAuthTx(*msg.To()) {
+						vmerr = txfilter.DoAuthHandle(msg.From(), msg.Data(), st.evm.BlockNumber.Int64())
+						txfilter.EthPosTable.Mtx.Unlock()
+					} else {
+						txfilter.EthPosTable.Mtx.Unlock()
+						if txfilter.IsMintTx(*msg.To()) {
+							vmerr = txfilter.IsMintBlocked(msg.From())
+							if vmerr == nil {
+								st.state.AddBalance(msg.From(), msg.Value()) //mint the money for the bigguy
+							}
+						} else {
+							ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+						}
 					}
 				} else {
-					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+					txfilter.EthPosTable.Mtx.Unlock()
 				}
 			}
 		}

@@ -6,7 +6,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	tmTypes "github.com/tendermint/tendermint/types"
 	"math/big"
-	"strings"
 	"github.com/ethereum/go-ethereum/crypto"
 	"bytes"
 )
@@ -39,17 +38,6 @@ func IsMintBlocked(from common.Address) (err error) {
 }
 
 func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64) (err error) {
-	if EthPosTable == nil {
-		return ErrPosTableNotCreate
-	}
-	if EthAuthTable == nil {
-		return ErrAuthTableNotCreate
-	}
-	EthPosTable.Mtx.RLock()
-	defer EthPosTable.Mtx.RUnlock()
-	if !EthPosTable.InitFlag {
-		return ErrPosTableNotInit
-	}
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {
 		if to != nil && IsUnlockTx(*to) {
@@ -180,22 +168,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 	return nil
 }
 
-func DoBetFilter(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
-	if EthPosTable == nil {
-		return false, ErrPosTableNotCreate
-	}
-	if EthAuthTable == nil {
-		return false, ErrAuthTableNotCreate
-	}
-	EthPosTable.Mtx.Lock()
-	defer EthPosTable.Mtx.Unlock()
-	if !EthPosTable.InitFlag {
-		return false, ErrPosTableNotInit
-	}
-	if !EthPosTable.InitFlag {
-		fmt.Printf("PosTable has not init yet")
-		return false, ErrPosTableNotInit
-	}
+func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
 	posItem, exist := EthPosTable.PosItemMap[from]
 	if exist {
 		if to != nil && IsUnlockTx(*to) {
@@ -328,9 +301,9 @@ func IsBetTx(to common.Address) bool {
 }
 
 func IsLockTx(to common.Address) bool {
-	return strings.EqualFold(to.String(), SendToLock.String())
+	return bytes.Equal(to.Bytes(), SendToLock.Bytes())
 }
 
 func IsUnlockTx(to common.Address) bool {
-	return strings.EqualFold(to.String(), SendToUnlock.String())
+	return bytes.Equal(to.Bytes(), SendToUnlock.Bytes())
 }

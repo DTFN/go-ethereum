@@ -659,36 +659,53 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 
 	balanceCheckAddress := from
 
-	//valid signature
-	if to != nil {
-		if txfilter.IsRelayTx(*to) {
-			subTx, relayer, err := types.DeriveRelayer(from, tx.Data())
-			if err != nil {
-				return err
-			}
-			fmt.Printf("txPool receives a relay tx, from %X relayer %X \n ", from, relayer)
-			fmt.Printf("tx %v subTx %v \n ", tx, subTx)
-			err = types.CheckRelayerTx(tx, subTx)
-			if err != nil {
-				return err
-			}
-			pool.relayTxInfo[tx.Hash()] = &RelayInfo{SubTx: subTx, RelayFrom: relayer}
-			balanceCheckAddress = relayer
-		} else if txfilter.IsAuthTx(*to) {
-			err := txfilter.IsAuthBlocked(from, tx.Data(), pool.chain.PendingBlock().Header().Number.Int64())
-			if err != nil {
-				return err
-			}
-		} else if txfilter.IsMintTx(*to) {
-			err := txfilter.IsMintBlocked(from)
-			if err != nil {
-				return err
-			}
-		}
+	if txfilter.EthPosTable == nil {
+		return txfilter.ErrPosTableNotCreate
 	}
+	if txfilter.EthAuthTable == nil {
+		return txfilter.ErrAuthTableNotCreate
+	}
+	if !txfilter.EthPosTable.InitFlag {
+		return txfilter.ErrPosTableNotInit
+	}
+	txfilter.EthPosTable.Mtx.RLock()
 	err = txfilter.IsBetBlocked(from, to, pool.currentState.GetBalance(from), tx.Data(), pool.chain.PendingBlock().Header().Number.Int64())
 	if err != nil {
+		txfilter.EthPosTable.Mtx.RUnlock()
 		return err
+	}
+	//valid signature
+	if to != nil {
+		if txfilter.IsAuthTx(*to) {
+			err := txfilter.IsAuthBlocked(from, tx.Data(), pool.chain.PendingBlock().Header().Number.Int64())
+			txfilter.EthPosTable.Mtx.RUnlock()
+			if err != nil {
+				return err
+			}
+		} else {
+			txfilter.EthPosTable.Mtx.RUnlock()
+			if txfilter.IsRelayTx(*to) {
+				subTx, relayer, err := types.DeriveRelayer(from, tx.Data())
+				if err != nil {
+					return err
+				}
+				fmt.Printf("txPool receives a relay tx, from %X relayer %X \n ", from, relayer)
+				fmt.Printf("tx %v subTx %v \n ", tx, subTx)
+				err = types.CheckRelayerTx(tx, subTx)
+				if err != nil {
+					return err
+				}
+				pool.relayTxInfo[tx.Hash()] = &RelayInfo{SubTx: subTx, RelayFrom: relayer}
+				balanceCheckAddress = relayer
+			} else if txfilter.IsMintTx(*to) {
+				err := txfilter.IsMintBlocked(from)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		txfilter.EthPosTable.Mtx.RUnlock()
 	}
 
 	// Drop non-local transactions under our own minimal accepted gas price

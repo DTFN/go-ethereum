@@ -31,18 +31,7 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err e
 		fmt.Printf("admin %X sent an auth tx with illegal format \n", from)
 		return fmt.Errorf("admin %X sent an auth tx with illegal format \n", from)
 	}
-	if EthPosTable == nil {
-		return ErrPosTableNotCreate
-	}
-	if EthAuthTable == nil {
-		return ErrAuthTableNotCreate
-	}
-	EthPosTable.Mtx.RLock()
-	defer EthPosTable.Mtx.RUnlock()
-	if !EthPosTable.InitFlag {
-		return ErrPosTableNotInit
-	}
-	fmt.Printf("=======receive ppcdata. %v", ppcdata)
+	fmt.Printf("-----receive ppcdata. %v", ppcdata)
 	if ppcdata.OperationType == "add" {
 		authItem, exist := EthAuthTable.AuthItemMap[ppcdata.PermittedAddress]
 		if exist {
@@ -83,18 +72,7 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err er
 		fmt.Printf("admin %X sent an auth tx with illegal format \n", from)
 		return fmt.Errorf("admin %X sent an auth tx with illegal format \n", from)
 	}
-	if EthPosTable == nil {
-		return ErrPosTableNotCreate
-	}
-	if EthAuthTable == nil {
-		return ErrAuthTableNotCreate
-	}
-	EthPosTable.Mtx.Lock()
-	defer EthPosTable.Mtx.Unlock()
-	if !EthPosTable.InitFlag {
-		return ErrPosTableNotInit
-	}
-	fmt.Printf("=======ppcdata. %v", ppcdata)
+	fmt.Printf("-----handle ppcdata. %v", ppcdata)
 	if ppcdata.OperationType == "add" {
 		authItem, exist := EthAuthTable.AuthItemMap[ppcdata.PermittedAddress]
 		if exist {
@@ -113,15 +91,12 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err er
 				PermitHeight:       height,
 			}
 			err = EthAuthTable.InsertAuthItem(ppcdata.PermittedAddress, authItem)
-			fmt.Printf("=======after InsertAuthItem. %v", EthAuthTable)
 			return
 		}
 	} else if ppcdata.OperationType == "remove" {
 		err = EthAuthTable.DeleteAuthItem(ppcdata.PermittedAddress)
 		return
 	} else if ppcdata.OperationType == "kickout" {
-		EthPosTable.Mtx.Lock()
-		defer EthPosTable.Mtx.Unlock()
 		return EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false)
 	}
 	return fmt.Errorf("admin %X sent an unrecognized OperationType %v \n", from, ppcdata.OperationType)
