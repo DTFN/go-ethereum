@@ -682,8 +682,7 @@ func (db *StateDB) InitAuthTable() (*txfilter.AuthTable) {
 		panic("no pre AuthTable")
 	} else {
 		log.Info("AuthTable Not nil")
-		txfilter.CreateAuthTable()
-		err := json.Unmarshal(nextBytes, txfilter.AuthTable{})
+		err := json.Unmarshal(nextBytes, txfilter.EthAuthTable)
 		if err != nil {
 			panic(fmt.Sprintf("initialize AuthTable error %v", err))
 		}

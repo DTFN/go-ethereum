@@ -225,7 +225,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	} else if !txfilter.EthPosTable.InitFlag {
 		vmerr = txfilter.ErrPosTableNotInit
 	}
-	if vmerr != nil {
+	if vmerr == nil {
 		if st.evm.BlockNumber.Int64() <= txfilter.UpgradeHeight {
 			if contractCreation {
 				txfilter.EthPosTable.Mtx.RLock()
