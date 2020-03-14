@@ -679,7 +679,7 @@ func (db *StateDB) InitAuthTable() (*txfilter.AuthTable) {
 	txfilter.CreateAuthTable()
 	if len(nextBytes) == 0 {
 		// no predata existed
-		panic("no pre AuthTable")
+		log.Error("no pre AuthTable")
 	} else {
 		log.Info("AuthTable Not nil")
 		err := json.Unmarshal(nextBytes, txfilter.EthAuthTable)
