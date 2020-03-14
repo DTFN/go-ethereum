@@ -21,7 +21,7 @@ var (
 )
 
 func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err error) {
-	if !bytes.Equal(from.Bytes(),PPChainAdmin.Bytes()){
+	if !bytes.Equal(from.Bytes(), PPChainAdmin.Bytes()) {
 		fmt.Printf("not admin %X sent an auth tx \n", from)
 		return fmt.Errorf("not admin %X sent an auth tx \n", from)
 	}
@@ -61,7 +61,7 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err e
 }
 
 func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err error) {
-	if !bytes.Equal(from.Bytes(),PPChainAdmin.Bytes()){
+	if !bytes.Equal(from.Bytes(), PPChainAdmin.Bytes()) {
 		fmt.Printf("not admin %X sent an auth tx \n", from)
 		return fmt.Errorf("not admin %X sent an auth tx \n", from)
 	}
@@ -96,7 +96,12 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err er
 		err = EthAuthTable.DeleteAuthItem(ppcdata.PermittedAddress)
 		return
 	} else if ppcdata.OperationType == "kickout" {
-		return EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false)
+		if err := EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false); err == nil {
+			EthAuthTable.DeleteAuthItem(ppcdata.PermittedAddress) //it possibly has auth item
+		} else {
+			return err
+		}
+		return
 	}
 	return fmt.Errorf("admin %X sent an unrecognized OperationType %v \n", from, ppcdata.OperationType)
 }
