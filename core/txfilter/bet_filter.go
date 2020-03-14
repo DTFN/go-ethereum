@@ -57,7 +57,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 					return fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
 				}
 				if height > authItem.EndHeight {
-					return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.StartHeight)
+					return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
 				}
 				currentSlots = int64(10)*/
 			}
@@ -120,7 +120,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 						return fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
 					}
 					if height > authItem.EndHeight {
-						return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.StartHeight)
+						return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
 					}
 					if tmHash := crypto.Keccak256(txDataBytes); !bytes.Equal(tmHash, authItem.ApprovedTxDataHash) {
 						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
@@ -129,7 +129,6 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 					currentSlots = int64(10)
 				}
 				if 1 > currentSlots {
-					fmt.Println("test1.1")
 					fmt.Println(currentSlots)
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return fmt.Errorf("signer %X doesn't have one slot of money", from)
@@ -273,7 +272,7 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 						return true, fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
 					}
 					if height > authItem.EndHeight {
-						return true, fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.StartHeight)
+						return true, fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
 					}
 					currentSlots = int64(10)
 					delete(EthAuthTable.AuthItemMap, from)	//delete the auth item when it joins PosTable

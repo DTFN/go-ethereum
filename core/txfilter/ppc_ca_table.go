@@ -39,7 +39,7 @@ func (permitTable *AuthTable) InsertAuthItem(permittedAddr common.Address, pi *A
 	fmt.Printf("insert pmi %v for permittedAddr %X", pi, permittedAddr)
 	EthPosTable.ChangedFlagThisBlock = true
 	if _, ok := permitTable.AuthItemMap[permittedAddr]; ok {
-		return fmt.Errorf("InsertPermitItem, permittedAddr %X already exist", permittedAddr)
+		return fmt.Errorf("InsertAuthItem, permittedAddr %X already exist", permittedAddr)
 	}
 	permitTable.AuthItemMap[permittedAddr] = pi
 	return nil
@@ -48,7 +48,7 @@ func (permitTable *AuthTable) InsertAuthItem(permittedAddr common.Address, pi *A
 func (permitTable *AuthTable) DeleteAuthItem(permittedAddr common.Address) error {
 	fmt.Printf("delete pmi for permittedAddr %X", permittedAddr)
 	if _, ok := permitTable.AuthItemMap[permittedAddr]; !ok {
-		fmt.Printf("DeletePermitItem, permittedAddr %X does not exist \n", permittedAddr)
+		fmt.Printf("DeleteAuthItem, permittedAddr %X does not exist \n", permittedAddr)
 		return fmt.Errorf("DeletePermitItem, permittedAddr %X does not exist \n", permittedAddr)
 	}
 	EthPosTable.ChangedFlagThisBlock = true

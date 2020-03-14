@@ -652,11 +652,9 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return ErrInvalidSender
 	}
-	to := tx.To()
-	if to == nil {
-		to = &common.Address{}
-	}
+	//valid signature
 
+	to := tx.To()
 	balanceCheckAddress := from
 
 	if txfilter.EthPosTable == nil {
@@ -674,7 +672,6 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		txfilter.EthPosTable.Mtx.RUnlock()
 		return err
 	}
-	//valid signature
 	if to != nil {
 		if txfilter.IsAuthTx(*to) {
 			err := txfilter.IsAuthBlocked(from, tx.Data(), pool.chain.PendingBlock().Header().Number.Int64())

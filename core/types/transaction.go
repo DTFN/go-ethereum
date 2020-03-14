@@ -248,7 +248,7 @@ func (tx *Transaction) AsMessageWithFrom(from common.Address, appVersion uint64)
 		data:       tx.data.Payload,
 		checkNonce: true,
 	}
-	if appVersion >= 4 { //wipe the transfer to 0 except bigguy and admin. We are coin-free chain!
+	if appVersion >= 4 { //wipe the transfer value to 0 except bigguy and admin. We are coin-free chain!
 		if !bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && !bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) {
 			msg.amount = big.NewInt(0)
 		}
