@@ -55,8 +55,7 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64) (err e
 			fmt.Printf("admin %X wants to kickout %X, but it is not in the PosTable \n", from, ppcdata.PermittedAddress)
 			return fmt.Errorf("admin %X wants to kickout %X, but it is not in the PosTable \n", from, ppcdata.PermittedAddress)
 		}
-		EthAuthTable.DeleteAuthItem(ppcdata.PermittedAddress) //it possibly has auth item
-		return EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false)
+		return
 	}
 	return fmt.Errorf("admin %X sent an unrecognized OperationType %v \n", from, ppcdata.OperationType)
 }
