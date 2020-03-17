@@ -22,11 +22,11 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/txfilter"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/core/txfilter"
-	"github.com/ethereum/go-ethereum/core/types"
 )
 
 var (
@@ -226,7 +226,23 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		vmerr = txfilter.ErrPosTableNotInit
 	}
 	if vmerr == nil {
-		if st.evm.BlockNumber.Int64() <= txfilter.UpgradeHeight {
+		if st.evm.BlockNumber.Int64() <= 3588000 {
+			if contractCreation {
+				vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+				if vmerr == nil {
+					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
+				} else {
+					st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+				}
+			} else {
+				// Increment the nonce for the next transaction
+				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+				isBetTx, vmerr := txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+				if vmerr == nil && !isBetTx {
+					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+				}
+			}
+		} else if st.evm.BlockNumber.Int64() <= txfilter.UpgradeHeight {
 			if contractCreation {
 				txfilter.EthPosTable.Mtx.RLock()
 				vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
