@@ -31,6 +31,7 @@ import (
 
 var (
 	errInsufficientBalanceForGas = errors.New("insufficient balance to pay for gas")
+	EvmErrHardForkHeight         int64
 )
 
 /*
@@ -226,7 +227,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		vmerr = txfilter.ErrPosTableNotInit
 	}
 	if vmerr == nil {
-		if st.evm.BlockNumber.Int64() <= 3588000 {
+		if st.evm.BlockNumber.Int64() <= EvmErrHardForkHeight {
 			if contractCreation {
 				txfilter.EthPosTable.Mtx.RLock()
 				vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
@@ -249,7 +250,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		} else if st.evm.BlockNumber.Int64() <= txfilter.UpgradeHeight {
 			if contractCreation {
 				txfilter.EthPosTable.Mtx.RLock()
-				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(),st.evm.BlockNumber.Int64())
+				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
 				txfilter.EthPosTable.Mtx.RUnlock()
 				if vmerr == nil {
 					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
