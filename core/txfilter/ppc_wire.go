@@ -11,6 +11,7 @@ type AuthData struct {
 	EndBlockHeight     int64          `json:"end_block_height"`
 	OperationType      string         `json:"operation_type"`
 	ApprovedTxDataHash []byte         `json:"approved_tx_data_hash"`
+	ApprovedTxData     TxData         `json:"approved_tx_data"`
 }
 
 func UnMarshalAuthTxData(jsonByte []byte) (AuthData, error) {

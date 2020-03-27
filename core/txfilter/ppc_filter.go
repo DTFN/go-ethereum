@@ -1,10 +1,10 @@
 package txfilter
 
 import (
-	"errors"
 	"bytes"
-	"github.com/ethereum/go-ethereum/common"
+	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
@@ -90,10 +90,22 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err er
 				PermitHeight:       height,
 			}
 			err = EthAuthTable.InsertAuthItem(ppcdata.PermittedAddress, authItem)
+
+			authTmItem := &AuthTmItem{
+				ApprovedTxData: ppcdata.ApprovedTxData,
+				Type:           "add",
+			}
+			EthAuthTable.ThisBlockChangedMap[ppcdata.PermittedAddress] = authTmItem
 			return
 		}
 	} else if ppcdata.OperationType == "remove" {
 		err = EthAuthTable.DeleteAuthItem(ppcdata.PermittedAddress)
+
+		authTmItem := &AuthTmItem{
+			ApprovedTxData: ppcdata.ApprovedTxData,
+			Type:           "remove",
+		}
+		EthAuthTable.ThisBlockChangedMap[ppcdata.PermittedAddress] = authTmItem
 		return
 	} else if ppcdata.OperationType == "kickout" {
 		if err := EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false); err == nil {

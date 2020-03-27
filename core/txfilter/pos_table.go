@@ -1,15 +1,15 @@
 package txfilter
 
 import (
+	"container/heap"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"math/big"
-	"sync"
-	abciTypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/spaolacci/murmur3"
+	abciTypes "github.com/tendermint/tendermint/abci/types"
+	"math/big"
 	"math/rand"
-	"container/heap"
 	"strings"
+	"sync"
 )
 
 // it means the lowest bond balance must equal or larger than the 1/1000 of totalBalance
@@ -267,6 +267,15 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64, sortedUnb
 			count++
 		} else {
 			break
+		}
+		//record every Unbound Peer for removing
+		EthAuthTable.ThisBlockChangedMap[signer] = &AuthTmItem{
+			ApprovedTxData: TxData{
+				PubKey:       posItem.PubKey,
+				Beneficiary:  posItem.Beneficiary.String(),
+				BlsKeyString: posItem.BlsKeyString,
+			},
+			Type: "remove",
 		}
 	}
 	return count

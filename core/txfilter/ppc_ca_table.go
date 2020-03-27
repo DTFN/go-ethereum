@@ -1,8 +1,8 @@
 package txfilter
 
 import (
-	"github.com/ethereum/go-ethereum/common"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
@@ -11,7 +11,12 @@ var (
 
 // TODO: merge this map into PosTable
 type AuthTable struct {
-	AuthItemMap        map[common.Address]*AuthItem `json:"auth_item_map"`
+	AuthItemMap map[common.Address]*AuthItem `json:"auth_item_map"`
+
+	//This is used to record all the auth-tx in a block
+	//and will be cleared in the endBlock
+	//needn't be writen into merkle-trie
+	ThisBlockChangedMap map[common.Address]*AuthTmItem `json:"-"`
 }
 
 type AuthItem struct {
@@ -19,6 +24,11 @@ type AuthItem struct {
 	PermitHeight       int64  `json:"auth_height"`
 	StartHeight        int64  `json:"start_height"`
 	EndHeight          int64  `json:"end_height"`
+}
+
+type AuthTmItem struct {
+	ApprovedTxData TxData
+	Type           string
 }
 
 func CreateAuthTable() *AuthTable {
@@ -31,7 +41,8 @@ func CreateAuthTable() *AuthTable {
 
 func NewAuthTable() *AuthTable {
 	return &AuthTable{
-		AuthItemMap:        make(map[common.Address]*AuthItem),
+		AuthItemMap:         make(map[common.Address]*AuthItem),
+		ThisBlockChangedMap: make(map[common.Address]*AuthTmItem),
 	}
 }
 
