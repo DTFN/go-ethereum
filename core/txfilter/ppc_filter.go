@@ -89,28 +89,26 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64) (err er
 				EndHeight:          ppcdata.EndBlockHeight,
 				PermitHeight:       height,
 			}
-			err = EthAuthTable.InsertAuthItem(ppcdata.PermittedAddress, authItem)
-
-			authTmItem := &AuthTmItem{
-				ApprovedTxData: ppcdata.ApprovedTxData,
-				Type:           "add",
+			if err = EthAuthTable.InsertAuthItem(ppcdata.PermittedAddress, authItem); err == nil {
+				authTmItem := &AuthTmItem{
+					ApprovedTxData: ppcdata.ApprovedTxData,
+					Type:           "add",
+				}
+				EthAuthTable.ThisBlockChangedMap[ppcdata.PermittedAddress] = authTmItem
 			}
-			EthAuthTable.ThisBlockChangedMap[ppcdata.PermittedAddress] = authTmItem
 			return
 		}
 	} else if ppcdata.OperationType == "remove" {
-		err = EthAuthTable.DeleteAuthItem(ppcdata.PermittedAddress)
-
-		authTmItem := &AuthTmItem{
-			ApprovedTxData: ppcdata.ApprovedTxData,
-			Type:           "remove",
+		if err = EthAuthTable.DeleteAuthItem(ppcdata.PermittedAddress); err == nil {
+			authTmItem := &AuthTmItem{
+				ApprovedTxData: ppcdata.ApprovedTxData,
+				Type:           "remove",
+			}
+			EthAuthTable.ThisBlockChangedMap[ppcdata.PermittedAddress] = authTmItem
 		}
-		EthAuthTable.ThisBlockChangedMap[ppcdata.PermittedAddress] = authTmItem
 		return
 	} else if ppcdata.OperationType == "kickout" {
-		if err := EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false); err == nil {
-			EthAuthTable.DeleteAuthItem(ppcdata.PermittedAddress) //it possibly has auth item
-		} else {
+		if err := EthPosTable.RemovePosItem(ppcdata.PermittedAddress, height, false); err != nil {
 			return err
 		}
 		return
