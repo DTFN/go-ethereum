@@ -689,16 +689,16 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 				if err != nil {
 					return err
 				}
+				err = types.CheckRelayerTx(tx, subTx)
+				if err != nil {
+					return err
+				}
 				relayer, err := types.DeriveSigner(from, subTx)
 				if err != nil {
 					return err
 				}
 				fmt.Printf("txPool receives a relay tx from client. client %X relayer %X \n ", from, relayer)
 				fmt.Printf("tx %v \n subTx %v \n ", tx, subTx)
-				err = types.CheckRelayerTx(tx, subTx)
-				if err != nil {
-					return err
-				}
 				pool.relayTxInfo[tx.Hash()] = &RelayInfo{SubTx: subTx, RelayFrom: relayer}
 				balanceCheckAddress = relayer
 			} else if txfilter.IsMintTx(*to) {
