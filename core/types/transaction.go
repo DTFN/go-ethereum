@@ -237,7 +237,7 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 	return msg, err
 }
 
-func (tx *Transaction) AsMessageWithFrom(from common.Address, appVersion uint64) (Message, error) {
+func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
 	msg := Message{
 		nonce:      tx.data.AccountNonce,
 		gasLimit:   tx.data.GasLimit,
@@ -248,7 +248,7 @@ func (tx *Transaction) AsMessageWithFrom(from common.Address, appVersion uint64)
 		data:       tx.data.Payload,
 		checkNonce: true,
 	}
-	if appVersion >= 4 { //wipe the transfer value to 0 except bigguy and admin. We are coin-free chain!
+	if txfilter.AppVersion >= 4 { //wipe the transfer value to 0 except bigguy and admin. We are coin-free chain!
 		if !bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && !bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) {
 			msg.amount = big.NewInt(0)
 		}

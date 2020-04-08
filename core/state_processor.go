@@ -90,12 +90,12 @@ func ApplyTransactionFacade(config *params.ChainConfig, bc *BlockChain, author *
 	return r, msg, u, e
 }
 
-func ApplyTransactionWithInfo(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, appVersion uint64, txInfo types.TxInfo, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
+func ApplyTransactionWithInfo(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction,  txInfo types.TxInfo, usedGas *uint64, cfg vm.Config) (*types.Receipt, Message, uint64, error) {
 	var msg Message
 	if txInfo.SubTx == nil {
-		msg, _ = tx.AsMessageWithFrom(txInfo.From, appVersion)
+		msg, _ = tx.AsMessageWithFrom(txInfo.From)
 	} else { //relay tx
-		msg, _ = txInfo.SubTx.AsMessageWithFrom(txInfo.From, appVersion)
+		msg, _ = txInfo.SubTx.AsMessageWithFrom(txInfo.From)
 	}
 	r, u, e := applyTransactionMessage(config, bc, author, gp, statedb, header, tx, msg, usedGas, cfg, &txInfo)
 	return r, msg, u, e

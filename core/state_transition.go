@@ -133,13 +133,13 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition 
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
 func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, sim bool) ([]byte, uint64, bool, error) {
-	return NewStateTransition(evm, msg, gp).TransitionDb(sim)
+	return NewStateTransition(evm, msg, gp).TransitionDb()
 }
 
 func ApplyMessageWithInfo(evm *vm.EVM, msg Message, gp *GasPool, txInfo *types.TxInfo) ([]byte, uint64, bool, error) {
 	st := NewStateTransition(evm, msg, gp)
 	st.txInfo = txInfo
-	return st.TransitionDb(false)
+	return st.transitionDb(false)
 }
 
 // to returns the recipient of the message.
@@ -190,11 +190,14 @@ func (st *StateTransition) preCheck() error {
 	}
 	return st.buyGas()
 }
+func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bool, err error) {
+	return st.transitionDb(true)
+}
 
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) TransitionDb(sim bool) (ret []byte, usedGas uint64, failed bool, err error) {
+func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, failed bool, err error) {
 	if err = st.preCheck(); err != nil {
 		return
 	}
@@ -236,7 +239,7 @@ func (st *StateTransition) TransitionDb(sim bool) (ret []byte, usedGas uint64, f
 					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 				}
 			}
-		} else if st.evm.BlockNumber.Int64() <= txfilter.UpgradeHeight {
+		} else if txfilter.AppVersion < 4 {
 			if contractCreation {
 				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 				if vmerr == nil {
@@ -294,7 +297,11 @@ func (st *StateTransition) TransitionDb(sim bool) (ret []byte, usedGas uint64, f
 		}
 	}
 	st.refundGas()
-	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	if txfilter.AppVersion >= 5 {	//force collected to bigguy. The block proposers can be awarded through off-chain
+		st.state.AddBalance(txfilter.Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	} else {
+		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	}
 
 	return ret, st.gasUsed(), vmerr != nil, err
 }

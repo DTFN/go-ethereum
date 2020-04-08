@@ -18,7 +18,7 @@ var (
 	ErrPosTableNotCreate = errors.New("PosTable has not created yet")
 	ErrPosTableNotInit   = errors.New("PosTable has not init yet")
 
-	UpgradeHeight int64
+	AppVersion uint64
 )
 
 func init() {
@@ -60,7 +60,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 			return posTable.CanRemovePosItem()
 		} else if to != nil && IsLockTx(*to) { //relock
 			currentSlots := int64(0)
-			if height < UpgradeHeight {
+			if AppVersion < 4 {
 				tmpInt := big.NewInt(0)
 				currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
 			} else {
@@ -124,7 +124,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 				return fmt.Errorf("signer %X has not bonded ", from)
 			} else if to != nil && IsLockTx(*to) { //first lock
 				currentSlots := int64(0)
-				if height < UpgradeHeight {
+				if AppVersion < 4 {
 					tmpInt := big.NewInt(0)
 					currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
 				} else {
@@ -205,7 +205,7 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 			return true, posTable.RemovePosItem(from, height, false)
 		} else if to != nil && IsLockTx(*to) { //relock
 			currentSlots := int64(0)
-			if height < UpgradeHeight {
+			if AppVersion < 4 {
 				tmpInt := big.NewInt(0)
 				currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
 			} else {
@@ -291,7 +291,7 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
 				currentSlots := int64(0)
-				if height < UpgradeHeight {
+				if AppVersion < 4 {
 					tmpInt := big.NewInt(0)
 					currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
 				} else {

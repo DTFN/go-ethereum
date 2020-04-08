@@ -648,7 +648,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrGasLimit
 	}
 	to := tx.To()
-	var from,balanceCheckAddress common.Address
+	var from, balanceCheckAddress common.Address
 
 	if to != nil {
 		if txfilter.IsRelayTxFromRelayer(*to) {
@@ -706,6 +706,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 				if err != nil {
 					return err
 				}
+				balanceCheckAddress = from
+			} else {
 				balanceCheckAddress = from
 			}
 		}
