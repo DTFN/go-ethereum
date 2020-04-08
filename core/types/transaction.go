@@ -290,7 +290,7 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 	return cpy, nil
 }
 
-func (tx *Transaction) WithRSV(v, r, s *big.Int) (*Transaction, error) {
+func (tx *Transaction) WithVRS(v, r, s *big.Int) (*Transaction, error) {
 	cpy := &Transaction{data: tx.data}
 	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v
 	return cpy, nil

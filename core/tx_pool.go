@@ -660,7 +660,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			if err != nil {
 				return err
 			}
-			txForVerify, err := subTx.WithRSV(tx.RawSignatureValues())
+			txForVerify, err := subTx.WithVRS(tx.RawSignatureValues())
 			if err != nil {
 				return err
 			}
