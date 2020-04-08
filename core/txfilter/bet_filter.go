@@ -46,7 +46,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 		posTable = CurrentPosTable
 	} else {
 		authTable = EthAuthTable
-		posTable = posTable
+		posTable = NextPosTable
 	}
 	if posTable == nil {
 		return ErrPosTableNotCreate
@@ -187,8 +187,8 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 	var authTable *AuthTable
 	var posTable *PosTable
 	if sim {
-		authTable = EthAuthTableCopy
-		posTable = CurrentPosTable
+		authTable = EthAuthTableCopy.Copy()
+		posTable = CurrentPosTable.Copy()
 	} else {
 		authTable = EthAuthTable
 		posTable = NextPosTable

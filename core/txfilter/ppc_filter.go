@@ -77,8 +77,8 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 	var authTable *AuthTable
 	var posTable *PosTable
 	if sim {
-		authTable = EthAuthTableCopy
-		posTable = CurrentPosTable
+		authTable = EthAuthTableCopy.Copy()
+		posTable = CurrentPosTable.Copy()
 	} else {
 		authTable = EthAuthTable
 		posTable = NextPosTable
