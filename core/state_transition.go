@@ -132,14 +132,14 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition 
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) ([]byte, uint64, bool, error) {
-	return NewStateTransition(evm, msg, gp).TransitionDb()
+func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool, sim bool) ([]byte, uint64, bool, error) {
+	return NewStateTransition(evm, msg, gp).TransitionDb(sim)
 }
 
 func ApplyMessageWithInfo(evm *vm.EVM, msg Message, gp *GasPool, txInfo *types.TxInfo) ([]byte, uint64, bool, error) {
 	st := NewStateTransition(evm, msg, gp)
 	st.txInfo = txInfo
-	return st.TransitionDb()
+	return st.TransitionDb(false)
 }
 
 // to returns the recipient of the message.
@@ -194,7 +194,7 @@ func (st *StateTransition) preCheck() error {
 // TransitionDb will transition the state by applying the current message and
 // returning the result including the the used gas. It returns an error if it
 // failed. An error indicates a consensus issue.
-func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bool, err error) {
+func (st *StateTransition) TransitionDb(sim bool) (ret []byte, usedGas uint64, failed bool, err error) {
 	if err = st.preCheck(); err != nil {
 		return
 	}
@@ -219,19 +219,10 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		// error.
 		vmerr error
 	)
-	if txfilter.EthPosTable == nil {
-		vmerr = txfilter.ErrPosTableNotCreate
-	} else if txfilter.EthAuthTable == nil {
-		vmerr = txfilter.ErrAuthTableNotCreate
-	} else if !txfilter.EthPosTable.InitFlag {
-		vmerr = txfilter.ErrPosTableNotInit
-	}
 	if vmerr == nil {
 		if st.evm.BlockNumber.Int64() <= EvmErrHardForkHeight {
 			if contractCreation {
-				txfilter.EthPosTable.Mtx.RLock()
-				vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-				txfilter.EthPosTable.Mtx.RUnlock()
+				vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 				if vmerr == nil {
 					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 				} else {
@@ -240,18 +231,14 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 			} else {
 				// Increment the nonce for the next transaction
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				txfilter.EthPosTable.Mtx.Lock()
-				isBetTx, vmerr := txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-				txfilter.EthPosTable.Mtx.Unlock()
+				isBetTx, vmerr := txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 				if vmerr == nil && !isBetTx {
 					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 				}
 			}
 		} else if st.evm.BlockNumber.Int64() <= txfilter.UpgradeHeight {
 			if contractCreation {
-				txfilter.EthPosTable.Mtx.RLock()
-				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-				txfilter.EthPosTable.Mtx.RUnlock()
+				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 				if vmerr == nil {
 					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 				} else {
@@ -261,18 +248,14 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 				// Increment the nonce for the next transaction
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 				isBetTx := false
-				txfilter.EthPosTable.Mtx.Lock()
-				isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-				txfilter.EthPosTable.Mtx.Unlock()
+				isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 				if vmerr == nil && !isBetTx {
 					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 				}
 			}
 		} else {
 			if contractCreation {
-				txfilter.EthPosTable.Mtx.RLock()
-				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
-				txfilter.EthPosTable.Mtx.RUnlock()
+				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 				if vmerr == nil {
 					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 				} else {
@@ -282,14 +265,11 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 				// Increment the nonce for the next transaction
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 				isBetTx := false
-				txfilter.EthPosTable.Mtx.Lock()
-				isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64())
+				isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 				if vmerr == nil && !isBetTx {
 					if txfilter.IsAuthTx(*msg.To()) {
-						vmerr = txfilter.DoAuthHandle(msg.From(), msg.Data(), st.evm.BlockNumber.Int64())
-						txfilter.EthPosTable.Mtx.Unlock()
+						vmerr = txfilter.DoAuthHandle(msg.From(), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 					} else {
-						txfilter.EthPosTable.Mtx.Unlock()
 						if txfilter.IsMintTx(*msg.To()) {
 							vmerr = txfilter.IsMintBlocked(msg.From())
 							if vmerr == nil {
@@ -299,8 +279,6 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 							ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 						}
 					}
-				} else {
-					txfilter.EthPosTable.Mtx.Unlock()
 				}
 			}
 		}

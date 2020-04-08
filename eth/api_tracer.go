@@ -97,7 +97,7 @@ func (api *PrivateDebugAPI) TraceChain(ctx context.Context, start, end rpc.Block
 
 	switch start {
 	case rpc.PendingBlockNumber:
-		from = api.eth.blockchain.CurrentBlock()	//use tendermint, no pending block now
+		from = api.eth.blockchain.CurrentBlock() //use tendermint, no pending block now
 		//from = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
 		from = api.eth.blockchain.CurrentBlock()
@@ -106,7 +106,7 @@ func (api *PrivateDebugAPI) TraceChain(ctx context.Context, start, end rpc.Block
 	}
 	switch end {
 	case rpc.PendingBlockNumber:
-		to = api.eth.blockchain.CurrentBlock()	//use tendermint, no pending block now
+		to = api.eth.blockchain.CurrentBlock() //use tendermint, no pending block now
 		//to = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
 		to = api.eth.blockchain.CurrentBlock()
@@ -341,7 +341,7 @@ func (api *PrivateDebugAPI) TraceBlockByNumber(ctx context.Context, number rpc.B
 
 	switch number {
 	case rpc.PendingBlockNumber:
-		block = api.eth.blockchain.CurrentBlock()	//use tendermint, no pending block now
+		block = api.eth.blockchain.CurrentBlock() //use tendermint, no pending block now
 		//block = api.eth.miner.PendingBlock()
 	case rpc.LatestBlockNumber:
 		block = api.eth.blockchain.CurrentBlock()
@@ -449,7 +449,7 @@ func (api *PrivateDebugAPI) traceBlock(ctx context.Context, block *types.Block, 
 		vmctx := core.NewEVMContext(msg, block.Header(), api.eth.blockchain, nil)
 
 		vmenv := vm.NewEVM(vmctx, statedb, api.config, vm.Config{})
-		if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
+		if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), true); err != nil {
 			failed = err
 			break
 		}
@@ -591,7 +591,7 @@ func (api *PrivateDebugAPI) traceTx(ctx context.Context, message core.Message, v
 	// Run the transaction with tracing enabled.
 	vmenv := vm.NewEVM(vmctx, statedb, api.config, vm.Config{Debug: true, Tracer: tracer})
 
-	ret, gas, failed, err := core.ApplyMessage(vmenv, message, new(core.GasPool).AddGas(message.Gas()))
+	ret, gas, failed, err := core.ApplyMessage(vmenv, message, new(core.GasPool).AddGas(message.Gas()), true)
 	if err != nil {
 		return nil, fmt.Errorf("tracing failed: %v", err)
 	}
@@ -640,7 +640,7 @@ func (api *PrivateDebugAPI) computeTxEnv(blockHash common.Hash, txIndex int, ree
 		}
 		// Not yet the searched for transaction, execute on top of the current state
 		vmenv := vm.NewEVM(context, statedb, api.config, vm.Config{})
-		if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
+		if _, _, _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas()), true); err != nil {
 			return nil, vm.Context{}, nil, fmt.Errorf("tx %x failed: %v", tx.Hash(), err)
 		}
 		statedb.DeleteSuicides()

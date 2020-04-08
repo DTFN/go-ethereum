@@ -6,7 +6,8 @@ import (
 )
 
 var (
-	EthAuthTable *AuthTable
+	EthAuthTable     *AuthTable
+	EthAuthTableCopy *AuthTable
 )
 
 // TODO: merge this map into PosTable
@@ -31,6 +32,16 @@ type AuthTmItem struct {
 	Type           string
 }
 
+func (authItem *AuthItem) Copy() *AuthItem {
+	copyAuthItem := &AuthItem{
+		PermitHeight: authItem.PermitHeight,
+		StartHeight:  authItem.StartHeight,
+		EndHeight:    authItem.EndHeight,
+	}
+	copy(copyAuthItem.ApprovedTxDataHash, authItem.ApprovedTxDataHash)
+	return copyAuthItem
+}
+
 func CreateAuthTable() *AuthTable {
 	if EthAuthTable != nil {
 		panic("txfilter.EthPermitTable already exist")
@@ -46,23 +57,31 @@ func NewAuthTable() *AuthTable {
 	}
 }
 
-func (permitTable *AuthTable) InsertAuthItem(permittedAddr common.Address, pi *AuthItem) error {
+func (authTable *AuthTable) Copy() *AuthTable {
+	copyAuthTable := NewAuthTable()
+	for addr, authItem := range EthAuthTable.AuthItemMap {
+		copyAuthTable.AuthItemMap[addr] = authItem.Copy()
+	}
+	return copyAuthTable
+}
+
+func (authTable *AuthTable) InsertAuthItem(permittedAddr common.Address, pi *AuthItem) error {
 	fmt.Printf("insert pmi %v for permittedAddr %X", pi, permittedAddr)
-	EthPosTable.ChangedFlagThisBlock = true
-	if _, ok := permitTable.AuthItemMap[permittedAddr]; ok {
+	NextPosTable.ChangedFlagThisBlock = true
+	if _, ok := authTable.AuthItemMap[permittedAddr]; ok {
 		return fmt.Errorf("InsertAuthItem, permittedAddr %X already exist", permittedAddr)
 	}
-	permitTable.AuthItemMap[permittedAddr] = pi
+	authTable.AuthItemMap[permittedAddr] = pi
 	return nil
 }
 
-func (permitTable *AuthTable) DeleteAuthItem(permittedAddr common.Address) error {
+func (authTable *AuthTable) DeleteAuthItem(permittedAddr common.Address) error {
 	fmt.Printf("delete pmi for permittedAddr %X", permittedAddr)
-	if _, ok := permitTable.AuthItemMap[permittedAddr]; !ok {
+	if _, ok := authTable.AuthItemMap[permittedAddr]; !ok {
 		fmt.Printf("DeleteAuthItem, permittedAddr %X does not exist \n", permittedAddr)
 		return fmt.Errorf("DeletePermitItem, permittedAddr %X does not exist \n", permittedAddr)
 	}
-	EthPosTable.ChangedFlagThisBlock = true
-	delete(permitTable.AuthItemMap, permittedAddr)
+	NextPosTable.ChangedFlagThisBlock = true
+	delete(authTable.AuthItemMap, permittedAddr)
 	return nil
 }

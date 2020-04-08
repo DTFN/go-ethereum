@@ -51,7 +51,7 @@ func (s *senderFromServer) Sender(tx *types.Transaction) (common.Address, error)
 	return s.addr, nil
 }
 
-func (s *senderFromServer) RelaySender(tx *types.Transaction, from common.Address) (common.Address, error) {
+func (s *senderFromServer) CustomSender(tx *types.Transaction, from common.Address) (common.Address, error) {
 	if s.blockhash == (common.Hash{}) {
 		return common.Address{}, errNotCached
 	}

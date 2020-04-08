@@ -266,6 +266,18 @@ func DecodeTx(txBytes []byte) (*Transaction, error) {
 	return tx, nil
 }
 
+func DecodeTxFromHexBytes(hexBytes []byte) (*Transaction, error) {
+	n, err := hex.Decode(hexBytes, hexBytes)
+	if err != nil {
+		return nil, fmt.Errorf("ppc tx data is not hex bytes. %v", err)
+	}
+	tx, err := DecodeTx(hexBytes[:n])
+	if err != nil {
+		return tx, fmt.Errorf("ppc tx data is not a subTx structure. %v", err)
+	}
+	return tx, nil
+}
+
 // WithSignature returns a new transaction with the given signature.
 // This signature needs to be in the [R || S || V] format where V is 0 or 1.
 func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, error) {
@@ -273,6 +285,12 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 	if err != nil {
 		return nil, err
 	}
+	cpy := &Transaction{data: tx.data}
+	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v
+	return cpy, nil
+}
+
+func (tx *Transaction) WithRSV(r, s, v *big.Int) (*Transaction, error) {
 	cpy := &Transaction{data: tx.data}
 	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v
 	return cpy, nil
@@ -459,21 +477,13 @@ type TxInfo struct {
 	RelayFrom common.Address
 }
 
-//signed data: rlp(subTransaction fields + from)
-func DeriveRelayer(from common.Address, txDataBytes []byte) (subTx *Transaction, relayer common.Address, err error) {
-	n, err := hex.Decode(txDataBytes, txDataBytes)
-	if err != nil {
-		return subTx, common.Address{}, fmt.Errorf("ppc tx data is not hex bytes. %v", err)
-	}
-	subTx, err = DecodeTx(txDataBytes[:n])
-	if err != nil {
-		return subTx, common.Address{}, fmt.Errorf("ppc tx data is not a subTx structure. %v", err)
-	}
+//custom signed data: rlp(one extra address + Transaction fields)
+func DeriveSigner(extra common.Address, tx *Transaction) (txSigner common.Address, err error) {
 	var signer Signer = HomesteadSigner{}
-	if subTx.Protected() {
-		signer = NewEIP155Signer(subTx.ChainId())
+	if tx.Protected() {
+		signer = NewEIP155Signer(tx.ChainId())
 	}
-	relayer, err = signer.RelaySender(subTx, from)
+	txSigner, err = signer.CustomSender(tx, extra)
 	return
 }
 

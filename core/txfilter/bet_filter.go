@@ -25,7 +25,8 @@ func init() {
 	w[SendToLock] = true
 	w[SendToUnlock] = true
 	w[SendToAuth] = true
-	w[SendToRelay] = true
+	w[RelayTxFromClient] = true
+	w[RelayTxFromRelayer] = true
 	w[SendToMint] = true
 }
 
@@ -37,16 +38,31 @@ func IsMintBlocked(from common.Address) (err error) {
 	return nil
 }
 
-func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64) (err error) {
-	posItem, exist := EthPosTable.PosItemMap[from]
+func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64, sim bool) (err error) {
+	var authTable *AuthTable
+	var posTable *PosTable
+	if sim {
+		authTable = EthAuthTableCopy
+		posTable = CurrentPosTable
+	} else {
+		authTable = EthAuthTable
+		posTable = posTable
+	}
+	if posTable == nil {
+		return ErrPosTableNotCreate
+	}
+	if !posTable.InitFlag {
+		return ErrPosTableNotInit
+	}
+	posItem, exist := posTable.PosItemMap[from]
 	if exist {
 		if to != nil && IsUnlockTx(*to) {
-			return EthPosTable.CanRemovePosItem()
+			return posTable.CanRemovePosItem()
 		} else if to != nil && IsLockTx(*to) { //relock
 			currentSlots := int64(0)
 			if height < UpgradeHeight {
 				tmpInt := big.NewInt(0)
-				currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+				currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
 			} else {
 				return fmt.Errorf("signer %X is already in PosTable. and it is after ppchain upgrade, no need to relock", from)
 				/*authItem, found := EthAuthTable.AuthItemMap[from]
@@ -80,11 +96,11 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 			if posItem.BlsKeyString != txData.BlsKeyString {
 				return fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
 			}
-			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
+			_, exist := posTable.TmAddressToSignerMap[tmAddress]
 			if !exist {
 				panic(fmt.Sprintf("tmAddress %v already be bonded by %X, but not found in TmAddressToSignerMap", tmAddress, from))
 			}
-			_, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
+			_, exist = posTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 			if !exist {
 				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
 			}
@@ -94,7 +110,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 			return fmt.Errorf("signer %X bonded at height %d ", from, posItem.Height)
 		}
 	} else {
-		posItem, exist := EthPosTable.UnbondPosItemMap[from]
+		posItem, exist := posTable.UnbondPosItemMap[from]
 		if exist {
 			if to != nil && IsUnlockTx(*to) {
 				return fmt.Errorf("signer %X already unbonded at height %d", from, posItem.Height)
@@ -110,9 +126,9 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 				currentSlots := int64(0)
 				if height < UpgradeHeight {
 					tmpInt := big.NewInt(0)
-					currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+					currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
 				} else {
-					authItem, found := EthAuthTable.AuthItemMap[from]
+					authItem, found := authTable.AuthItemMap[from]
 					if !found {
 						return fmt.Errorf("signer %X authItem not found in AuthTable", from)
 					}
@@ -148,11 +164,11 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 				if len(tmAddress) == 0 {
 					return fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
 				}
-				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
+				signer, exist := posTable.TmAddressToSignerMap[tmAddress]
 				if exist {
 					return fmt.Errorf("tmAddress %v already be bonded by %X", tmAddress, signer)
 				}
-				signer, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
+				signer, exist = posTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 				if exist {
 					return fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
@@ -167,16 +183,31 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 	return nil
 }
 
-func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64) (isBetTx bool, err error) {
-	posItem, exist := EthPosTable.PosItemMap[from]
+func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDataBytes []byte, height int64, sim bool) (isBetTx bool, err error) {
+	var authTable *AuthTable
+	var posTable *PosTable
+	if sim {
+		authTable = EthAuthTableCopy
+		posTable = CurrentPosTable
+	} else {
+		authTable = EthAuthTable
+		posTable = NextPosTable
+	}
+	if posTable == nil {
+		return false, ErrPosTableNotCreate
+	}
+	if !posTable.InitFlag {
+		return false, ErrPosTableNotInit
+	}
+	posItem, exist := posTable.PosItemMap[from]
 	if exist {
 		if to != nil && IsUnlockTx(*to) {
-			return true, EthPosTable.RemovePosItem(from, height, false)
+			return true, posTable.RemovePosItem(from, height, false)
 		} else if to != nil && IsLockTx(*to) { //relock
 			currentSlots := int64(0)
 			if height < UpgradeHeight {
 				tmpInt := big.NewInt(0)
-				currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+				currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
 			} else {
 				return true, fmt.Errorf("signer %X is already in PosTable. and it is after ppchain upgrade, no need to relock", from)
 				//currentSlots = int64(10)
@@ -203,21 +234,21 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 				fmt.Printf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
 				return true, fmt.Errorf("signer %X bonded BlsKeyString %v not matched with current BlsKeyString %v ", from, posItem.BlsKeyString, txData.BlsKeyString)
 			}
-			_, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
+			_, exist := posTable.TmAddressToSignerMap[tmAddress]
 			if !exist {
 				panic(fmt.Sprintf("tmAddress %v already be bonded by %X, but not found in TmAddressToSignerMap", tmAddress, from))
 			}
-			_, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
+			_, exist = posTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 			if !exist {
 				panic(fmt.Sprintf("blsKeyString %v already be bonded by %X, but not found in TmAddressToSignerMap", txData.BlsKeyString, from))
 			}
-			EthPosTable.UpdatePosItem(from, currentSlots)
+			posTable.UpdatePosItem(from, currentSlots)
 			return true, nil
 		} else {
 			return false, fmt.Errorf("signer %X bonded at height %d ", from, posItem.Height)
 		}
 	} else {
-		posItem, exist := EthPosTable.UnbondPosItemMap[from]
+		posItem, exist := posTable.UnbondPosItemMap[from]
 		if exist {
 			if to != nil && IsUnlockTx(*to) {
 				fmt.Printf("signer %X already unbonded at height %d", from, posItem.Height)
@@ -249,12 +280,12 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 				if len(tmAddress) == 0 {
 					return true, fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
 				}
-				signer, exist := EthPosTable.TmAddressToSignerMap[tmAddress]
+				signer, exist := posTable.TmAddressToSignerMap[tmAddress]
 				if exist {
 					fmt.Printf("tmAddress %v already be bonded by %X", tmAddress, signer)
 					return true, fmt.Errorf("tmAddress %v already be bonded by %X", tmAddress, signer)
 				}
-				signer, exist = EthPosTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
+				signer, exist = posTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 				if exist {
 					fmt.Printf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
@@ -262,9 +293,9 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 				currentSlots := int64(0)
 				if height < UpgradeHeight {
 					tmpInt := big.NewInt(0)
-					currentSlots = tmpInt.Div(balance, EthPosTable.Threshold).Int64()
+					currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
 				} else {
-					authItem, found := EthAuthTable.AuthItemMap[from]
+					authItem, found := authTable.AuthItemMap[from]
 					if !found {
 						return true, fmt.Errorf("signer %X authItem not found in AuthTable", from)
 					}
@@ -275,14 +306,14 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 						return true, fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
 					}
 					currentSlots = int64(10)
-					delete(EthAuthTable.AuthItemMap, from)	//delete the auth item when it joins PosTable
+					delete(authTable.AuthItemMap, from) //delete the auth item when it joins PosTable
 				}
 				if 1 > currentSlots {
 					fmt.Println(currentSlots)
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
-				return true, EthPosTable.InsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary)))  //this should succeed, otherwise authItem has to rollback
+				return true, posTable.InsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary))) //this should succeed, otherwise authItem has to rollback
 			}
 		}
 	}

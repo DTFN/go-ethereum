@@ -664,12 +664,12 @@ func (db *StateDB) InitPosTable() (*txfilter.PosTable) {
 		panic("no pre NextEpochValData.PosTable")
 	} else {
 		log.Info("NextEpochValData.PosTable Not nil")
-		err := json.Unmarshal(nextBytes, txfilter.EthPosTable)
+		err := json.Unmarshal(nextBytes, txfilter.NextPosTable)
 		if err != nil {
 			panic(fmt.Sprintf("initialize NextEpochValData.PosTable error %v", err))
 		}
 	}
-	return txfilter.EthPosTable
+	return txfilter.NextPosTable
 }
 
 func (db *StateDB) InitAuthTable() (*txfilter.AuthTable) {
@@ -687,5 +687,6 @@ func (db *StateDB) InitAuthTable() (*txfilter.AuthTable) {
 			panic(fmt.Sprintf("initialize AuthTable error %v", err))
 		}
 	}
+	txfilter.EthAuthTableCopy = txfilter.EthAuthTable.Copy()
 	return txfilter.EthAuthTable
 }

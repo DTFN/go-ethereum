@@ -320,11 +320,10 @@ func (l *txList) Filter_relay(costLimit *big.Int, pool *TxPool, gasLimit uint64)
 	l.costcap = new(big.Int).Set(costLimit) // Lower the caps to the thresholds
 	l.gascap = gasLimit
 
-
 	// Filter out all the transactions above the account's funds
 	removed = l.txs.Filter(func(tx *types.Transaction) bool {
-		if tx.To() != nil && bytes.Equal(tx.To().Bytes(), txfilter.SendToRelay.Bytes()) {
-				return tx.Cost().Cmp(pool.currentState.GetBalance(pool.relayTxInfo[tx.Hash()].RelayFrom)) > 0 || tx.Gas() > gasLimit
+		if tx.To() != nil && (bytes.Equal(tx.To().Bytes(), txfilter.RelayTxFromRelayer.Bytes()) || bytes.Equal(tx.To().Bytes(), txfilter.RelayTxFromClient.Bytes())) {
+			return tx.Cost().Cmp(pool.currentState.GetBalance(pool.relayTxInfo[tx.Hash()].RelayFrom)) > 0 || tx.Gas() > gasLimit
 		}
 		return tx.Cost().Cmp(costLimit) > 0 || tx.Gas() > gasLimit
 	})

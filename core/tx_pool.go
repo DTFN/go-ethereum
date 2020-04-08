@@ -647,47 +647,54 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if pool.currentMaxGas < tx.Gas() {
 		return ErrGasLimit
 	}
-	// Make sure the transaction is signed properly
-	from, err := types.Sender(pool.signer, tx)
-	if err != nil {
-		return ErrInvalidSender
-	}
-	//valid signature
-
 	to := tx.To()
-	balanceCheckAddress := from
+	var from,balanceCheckAddress common.Address
 
-	if txfilter.EthPosTable == nil {
-		return txfilter.ErrPosTableNotCreate
-	}
-	if txfilter.EthAuthTable == nil {
-		return txfilter.ErrAuthTableNotCreate
-	}
-	if !txfilter.EthPosTable.InitFlag {
-		return txfilter.ErrPosTableNotInit
-	}
-	txfilter.EthPosTable.Mtx.RLock()
-	err = txfilter.IsBetBlocked(from, to, pool.currentState.GetBalance(from), tx.Data(), pool.chain.PendingBlock().Header().Number.Int64())
-	if err != nil {
-		txfilter.EthPosTable.Mtx.RUnlock()
-		return err
-	}
 	if to != nil {
-		if txfilter.IsAuthTx(*to) {
-			err := txfilter.IsAuthBlocked(from, tx.Data(), pool.chain.PendingBlock().Header().Number.Int64())
-			txfilter.EthPosTable.Mtx.RUnlock()
+		if txfilter.IsRelayTxFromRelayer(*to) {
+			subTx, err := types.DecodeTxFromHexBytes(tx.Data())
 			if err != nil {
 				return err
 			}
+			err = types.CheckRelayerTx(tx, subTx)
+			if err != nil {
+				return err
+			}
+			txForVerify, err := subTx.WithRSV(tx.RawSignatureValues())
+			if err != nil {
+				return err
+			}
+			// Make sure the transaction is signed properly
+			from, err = types.Sender(pool.signer, txForVerify)
+			if err != nil {
+				return ErrInvalidSender
+			}
+			relayer, err := types.DeriveSigner(from, subTx)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("txPool receives a relay tx from relayer. client %X relayer %X \n ", from, relayer)
+			fmt.Printf("tx %v \n subTx %v \n ", tx, subTx)
+			pool.relayTxInfo[tx.Hash()] = &RelayInfo{SubTx: subTx, RelayFrom: relayer}
+			balanceCheckAddress = relayer
 		} else {
-			txfilter.EthPosTable.Mtx.RUnlock()
-			if txfilter.IsRelayTx(*to) {
-				subTx, relayer, err := types.DeriveRelayer(from, tx.Data())
+			var err error
+			// Make sure the transaction is signed properly
+			from, err = types.Sender(pool.signer, tx)
+			if err != nil {
+				return ErrInvalidSender
+			}
+			if txfilter.IsRelayTxFromClient(*to) {
+				subTx, err := types.DecodeTxFromHexBytes(tx.Data())
 				if err != nil {
 					return err
 				}
-				fmt.Printf("txPool receives a relay tx, from %X relayer %X \n ", from, relayer)
-				fmt.Printf("tx %v subTx %v \n ", tx, subTx)
+				relayer, err := types.DeriveSigner(from, subTx)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("txPool receives a relay tx from client. client %X relayer %X \n ", from, relayer)
+				fmt.Printf("tx %v \n subTx %v \n ", tx, subTx)
 				err = types.CheckRelayerTx(tx, subTx)
 				if err != nil {
 					return err
@@ -699,10 +706,17 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 				if err != nil {
 					return err
 				}
+				balanceCheckAddress = from
 			}
 		}
 	} else {
-		txfilter.EthPosTable.Mtx.RUnlock()
+		var err error
+		// Make sure the transaction is signed properly
+		from, err = types.Sender(pool.signer, tx)
+		if err != nil {
+			return ErrInvalidSender
+		}
+		balanceCheckAddress = from
 	}
 
 	// Drop non-local transactions under our own minimal accepted gas price

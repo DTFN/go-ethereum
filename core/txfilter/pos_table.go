@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"math/rand"
 	"strings"
-	"sync"
 )
 
 // it means the lowest bond balance must equal or larger than the 1/1000 of totalBalance
@@ -18,19 +17,19 @@ const UnbondWaitEpochs = 3
 const EpochBlocks = int64(200)
 
 var (
-	EthPosTable *PosTable
+	CurrentPosTable *PosTable
+	NextPosTable    *PosTable
 )
 
 func CreatePosTable() *PosTable {
-	if EthPosTable != nil {
-		panic("txfilter.EthPosTable already exist")
+	if NextPosTable != nil {
+		panic("NextPosTable already exist")
 	}
-	EthPosTable = NewPosTable()
-	return EthPosTable
+	NextPosTable = NewPosTable()
+	return NextPosTable
 }
 
 type PosTable struct {
-	Mtx             sync.RWMutex                          `json:"-"`
 	InitFlag        bool                                  `json:"-"`
 	PosItemMap      map[common.Address]*PosItem           `json:"pos_item_map"`
 	SortedPosItems  *PosItemSortedQueue                   `json:"-"`
@@ -66,8 +65,6 @@ func NewPosTable() *PosTable {
 }
 
 func (posTable *PosTable) Copy() *PosTable {
-	posTable.Mtx.RLock()
-	defer posTable.Mtx.RUnlock()
 	/*	posByte, _ := json.Marshal(posTable)
 		newPosTable := NewPosTable(posTable.Threshold)
 		json.Unmarshal(posByte, &newPosTable)*/
@@ -120,14 +117,10 @@ func (posTable *PosTable) String() string {
 }
 
 func (posTable *PosTable) SetThreshold(threshold *big.Int) {
-	posTable.Mtx.Lock()
-	defer posTable.Mtx.Unlock()
 	posTable.Threshold = threshold
 }
 
 func (posTable *PosTable) InitStruct() {
-	posTable.Mtx.Lock()
-	defer posTable.Mtx.Unlock()
 	posTable.SortedPosItems = NewPosItemSortedQueue()
 	posTable.PosItemIndexMap = make(map[common.Address]*PosItemWithSigner)
 	posTable.TmAddressToSignerMap = make(map[string]common.Address)
@@ -247,8 +240,6 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64, sla
 
 func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64, sortedUnbondSigners []common.Address) int {
 	count := 0
-	posTable.Mtx.Lock()
-	defer posTable.Mtx.Unlock()
 	for _, signer := range sortedUnbondSigners {
 		posItem, ok := posTable.UnbondPosItemMap[signer]
 		if !ok {
@@ -265,17 +256,18 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64, sortedUnb
 			delete(posTable.TmAddressToSignerMap, posItem.TmAddress)
 			delete(posTable.BlsKeyStringToSignerMap, posItem.BlsKeyString)
 			count++
+
+			//record every Unbound Peer for removing
+			EthAuthTable.ThisBlockChangedMap[signer] = &AuthTmItem{
+				ApprovedTxData: TxData{
+					PubKey:       posItem.PubKey,
+					Beneficiary:  posItem.Beneficiary.String(),
+					BlsKeyString: posItem.BlsKeyString,
+				},
+				Type: "remove",
+			}
 		} else {
 			break
-		}
-		//record every Unbound Peer for removing
-		EthAuthTable.ThisBlockChangedMap[signer] = &AuthTmItem{
-			ApprovedTxData: TxData{
-				PubKey:       posItem.PubKey,
-				Beneficiary:  posItem.Beneficiary.String(),
-				BlsKeyString: posItem.BlsKeyString,
-			},
-			Type: "remove",
 		}
 	}
 	return count
