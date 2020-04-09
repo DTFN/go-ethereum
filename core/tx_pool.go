@@ -649,7 +649,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	to := tx.To()
 	var from, balanceCheckAddress common.Address
-
+	var signer types.Signer = types.HomesteadSigner{}
+	if tx.Protected() {
+		signer = pool.signer
+	}
 	if to != nil {
 		if txfilter.IsRelayTxFromRelayer(*to) {
 			subTx, err := types.DecodeTxFromHexBytes(tx.Data())
@@ -665,11 +668,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 				return err
 			}
 			// Make sure the transaction is signed properly
-			from, err = types.Sender(pool.signer, txForVerify)
+			from, err = types.Sender(signer, txForVerify)
 			if err != nil {
 				return ErrInvalidSender
 			}
-			tx.SetFrom(pool.signer, from)
+			tx.SetFrom(signer, from)
 			relayer, err := types.DeriveSigner(from, subTx)
 			if err != nil {
 				return err
@@ -681,7 +684,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		} else {
 			var err error
 			// Make sure the transaction is signed properly
-			from, err = types.Sender(pool.signer, tx)
+			from, err = types.Sender(signer, tx)
 			if err != nil {
 				return ErrInvalidSender
 			}
@@ -715,7 +718,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	} else {
 		var err error
 		// Make sure the transaction is signed properly
-		from, err = types.Sender(pool.signer, tx)
+		from, err = types.Sender(signer, tx)
 		if err != nil {
 			return ErrInvalidSender
 		}
@@ -793,8 +796,12 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 			pool.removeTx(tx.Hash(), false)
 		}
 	}
+	var signer types.Signer = types.HomesteadSigner{}
+	if tx.Protected() {
+		signer = pool.signer
+	}
 	// If the transaction is replacing an already pending one, do directly
-	from, _ := types.Sender(pool.signer, tx) // already validated
+	from, _ := types.Sender(signer, tx) // already validated
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
 		// Nonce already pending, check if required price bump is met
 		inserted, old := list.Add(tx, pool.config.PriceBump)
@@ -839,8 +846,12 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 //
 // Note, this method assumes the pool lock is held!
 func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, error) {
+	var signer types.Signer = types.HomesteadSigner{}
+	if tx.Protected() {
+		signer = pool.signer
+	}
 	// Try to insert the transaction into the future queue
-	from, _ := types.Sender(pool.signer, tx) // already validated
+	from, _ := types.Sender(signer, tx) // already validated
 	if pool.queue[from] == nil {
 		pool.queue[from] = newTxList(false)
 	}
@@ -972,7 +983,11 @@ func (pool *TxPool) AddLocalCheck(tx *types.Transaction) error {
 		}
 		// If we added a new transaction, run promotion checks and return
 		if !replace {
-			from, _ := types.Sender(pool.signer, tx) // already validated
+			var signer types.Signer = types.HomesteadSigner{}
+			if tx.Protected() {
+				signer = pool.signer
+			}
+			from, _ := types.Sender(signer, tx) // already validated
 			pool.promoteExecutables([]common.Address{from})
 		}
 		return nil
@@ -1035,7 +1050,11 @@ func (pool *TxPool) HandleCachedTxs() {
 		if !replace {
 			txPreEvent.Result = txCallback.result
 			pool.pendingTxPreEvent[txCallback.tx.Hash()] = txPreEvent
-			from, _ := types.Sender(pool.signer, txCallback.tx) // already validated
+			var signer types.Signer = types.HomesteadSigner{}
+			if txCallback.tx.Protected() {
+				signer = pool.signer
+			}
+			from, _ := types.Sender(signer, txCallback.tx) // already validated
 			pool.promoteExecutables([]common.Address{from})
 			delete(pool.pendingTxPreEvent, txCallback.tx.Hash())
 		}
@@ -1080,7 +1099,11 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	pool.pendingTxPreEvent[tx.Hash()] = txPreEvent
 	// If we added a new transaction, run promotion checks and return
 	if !replace {
-		from, _ := types.Sender(pool.signer, tx) // already validated
+		var signer types.Signer = types.HomesteadSigner{}
+		if tx.Protected() {
+			signer = pool.signer
+		}
+		from, _ := types.Sender(signer, tx) // already validated
 		pool.promoteExecutables([]common.Address{from})
 	}
 	delete(pool.pendingTxPreEvent, tx.Hash())
@@ -1172,7 +1195,11 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 		var replace bool
 		if replace, errs[i] = pool.add(tx, local); errs[i] == nil {
 			if !replace {
-				from, _ := types.Sender(pool.signer, tx) // already validated
+				var signer types.Signer = types.HomesteadSigner{}
+				if tx.Protected() {
+					signer = pool.signer
+				}
+				from, _ := types.Sender(signer, tx) // already validated
 				dirty[from] = struct{}{}
 				txPreEvent := &TxPreEvent{}
 				pool.pendingTxPreEvent[tx.Hash()] = txPreEvent
@@ -1200,7 +1227,11 @@ func (pool *TxPool) Status(hashes []common.Hash) []TxStatus {
 	status := make([]TxStatus, len(hashes))
 	for i, hash := range hashes {
 		if tx := pool.all[hash]; tx != nil {
-			from, _ := types.Sender(pool.signer, tx) // already validated
+			var signer types.Signer = types.HomesteadSigner{}
+			if tx.Protected() {
+				signer = pool.signer
+			}
+			from, _ := types.Sender(signer, tx) // already validated
 			if pool.pending[from] != nil && pool.pending[from].txs.items[tx.Nonce()] != nil {
 				status[i] = TxStatusPending
 			} else {
@@ -1228,7 +1259,11 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	if !ok {
 		return
 	}
-	addr, _ := types.Sender(pool.signer, tx) // already validated during insertion
+	var signer types.Signer = types.HomesteadSigner{}
+	if tx.Protected() {
+		signer = pool.signer
+	}
+	addr, _ := types.Sender(signer, tx) // already validated during insertion
 
 	// Remove it from the list of known transactions
 	delete(pool.all, hash)

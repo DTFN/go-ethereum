@@ -194,7 +194,7 @@ func (tx *Transaction) To() *common.Address {
 }
 
 // SetFrom only used in custom signer recovery
-func (tx *Transaction) SetFrom(signer Signer, addr common.Address) error {
+func (tx *Transaction) SetFrom(signer Signer, addr common.Address) {
 	tx.from.Store(sigCache{signer: signer, from: addr})
 }
 
