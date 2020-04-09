@@ -669,6 +669,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			if err != nil {
 				return ErrInvalidSender
 			}
+			tx.SetFrom(pool.signer, from)
 			relayer, err := types.DeriveSigner(from, subTx)
 			if err != nil {
 				return err

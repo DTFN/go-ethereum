@@ -193,6 +193,11 @@ func (tx *Transaction) To() *common.Address {
 	return &to
 }
 
+// SetFrom only used in custom signer recovery
+func (tx *Transaction) SetFrom(signer Signer, addr common.Address) error {
+	tx.from.Store(sigCache{signer: signer, from: addr})
+}
+
 // Hash hashes the RLP encoding of tx.
 // It uniquely identifies the transaction.
 func (tx *Transaction) Hash() common.Hash {
