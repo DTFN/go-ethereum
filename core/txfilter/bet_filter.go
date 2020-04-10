@@ -278,7 +278,6 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 					delete(EthAuthTable.AuthItemMap, from)	//delete the auth item when it joins PosTable
 				}
 				if 1 > currentSlots {
-					fmt.Println("test1.1")
 					fmt.Println(currentSlots)
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)

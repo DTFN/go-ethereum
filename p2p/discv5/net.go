@@ -27,16 +27,15 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
 	"github.com/ethereum/go-ethereum/rlp"
+	"golang.org/x/crypto/sha3"
 )
 
 var (
 	errInvalidEvent = errors.New("invalid in current state")
 	errNoQuery      = errors.New("no pending query")
-	errWrongAddress = errors.New("unknown sender address")
 )
 
 const (
@@ -78,14 +77,6 @@ type Network struct {
 	nursery       []*Node
 	nodes         map[NodeID]*Node // tracks active nodes with state != known
 	timeoutTimers map[timeoutEvent]*time.Timer
-
-	// Revalidation queues.
-	// Nodes put on these queues will be pinged eventually.
-	slowRevalidateQueue []*Node
-	fastRevalidateQueue []*Node
-
-	// Buffers for state transition.
-	sendBuf []*ingressPacket
 }
 
 // transport is implemented by the UDP transport.
@@ -105,10 +96,9 @@ type transport interface {
 }
 
 type findnodeQuery struct {
-	remote   *Node
-	target   common.Hash
-	reply    chan<- []*Node
-	nresults int // counter for received nodes
+	remote *Node
+	target common.Hash
+	reply  chan<- []*Node
 }
 
 type topicRegisterReq struct {
@@ -568,12 +558,11 @@ loop:
 			net.ticketStore.searchLookupDone(res.target, res.nodes, func(n *Node, topic Topic) []byte {
 				if n.state != nil && n.state.canQuery {
 					return net.conn.send(n, topicQueryPacket, topicQuery{Topic: topic}) // TODO: set expiration
-				} else {
-					if n.state == unknown {
-						net.ping(n, n.addr())
-					}
-					return nil
 				}
+				if n.state == unknown {
+					net.ping(n, n.addr())
+				}
+				return nil
 			})
 
 		case <-statsDump.C:
@@ -652,10 +641,10 @@ loop:
 	if net.conn != nil {
 		net.conn.Close()
 	}
-	if refreshDone != nil {
-		// TODO: wait for pending refresh.
-		//<-refreshResults
-	}
+	// TODO: wait for pending refresh.
+	// if refreshDone != nil {
+	// 	<-refreshResults
+	// }
 	// Cancel all pending timeouts.
 	for _, timer := range net.timeoutTimers {
 		timer.Stop()
@@ -679,7 +668,7 @@ func (net *Network) refresh(done chan<- struct{}) {
 	}
 	if len(seeds) == 0 {
 		log.Trace("no seed nodes found")
-		close(done)
+		time.AfterFunc(time.Second*10, func() { close(done) })
 		return
 	}
 	for _, n := range seeds {
@@ -802,7 +791,7 @@ func (n *nodeNetGuts) startNextQuery(net *Network) {
 func (q *findnodeQuery) start(net *Network) bool {
 	// Satisfy queries against the local node directly.
 	if q.remote == net.tab.self {
-		closest := net.tab.closest(crypto.Keccak256Hash(q.target[:]), bucketSize)
+		closest := net.tab.closest(q.target, bucketSize)
 		q.reply <- closest.entries
 		return true
 	}
@@ -828,11 +817,10 @@ type nodeEvent uint
 //go:generate stringer -type=nodeEvent
 
 const (
-	invalidEvent nodeEvent = iota // zero is reserved
 
 	// Packet type events.
 	// These correspond to packet types in the UDP protocol.
-	pingPacket
+	pingPacket = iota + 1
 	pongPacket
 	findnodePacket
 	neighborsPacket
@@ -1230,14 +1218,14 @@ func (net *Network) checkTopicRegister(data *topicRegister) (*pong, error) {
 	if rlpHash(data.Topics) != pongpkt.data.(*pong).TopicHash {
 		return nil, errors.New("topic hash mismatch")
 	}
-	if data.Idx < 0 || int(data.Idx) >= len(data.Topics) {
+	if data.Idx >= uint(len(data.Topics)) {
 		return nil, errors.New("topic index out of range")
 	}
 	return pongpkt.data.(*pong), nil
 }
 
 func rlpHash(x interface{}) (h common.Hash) {
-	hw := sha3.NewKeccak256()
+	hw := sha3.NewLegacyKeccak256()
 	rlp.Encode(hw, x)
 	hw.Sum(h[:0])
 	return h

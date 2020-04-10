@@ -46,6 +46,7 @@ const (
 )
 
 var (
+	ErrAlreadyKnown = errors.New("already known")
 	// ErrInvalidSender is returned if the transaction contains an invalid signature.
 	ErrInvalidSender = errors.New("invalid sender")
 
@@ -134,9 +135,10 @@ type blockChain interface {
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
 type TxPoolConfig struct {
-	NoLocals  bool          // Whether local transaction handling should be disabled
-	Journal   string        // Journal of local transactions to survive node restarts
-	Rejournal time.Duration // Time interval to regenerate the local transaction journal
+	Locals    []common.Address // Addresses that should be treated by default as local
+	NoLocals  bool             // Whether local transaction handling should be disabled
+	Journal   string           // Journal of local transactions to survive node restarts
+	Rejournal time.Duration    // Time interval to regenerate the local transaction journal
 
 	PriceLimit uint64 // Minimum gas price to enforce for acceptance into the pool
 	PriceBump  uint64 // Minimum price bump percentage to replace an already existing transaction (nonce)
@@ -232,7 +234,6 @@ type TxPool struct {
 	priced  *txPricedList                      // All transactions sorted by price
 
 	blockArrive       bool //true when loop() wants to get lock
-	initTxCount       int
 	appConsumer       bool
 	pendingTxPreEvent map[common.Hash]*TxPreEvent
 	relayTxInfo       map[common.Hash]*RelayInfo
@@ -262,7 +263,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		config:            config,
 		chainconfig:       chainconfig,
 		chain:             chain,
-		signer:            types.NewEIP155Signer(chainconfig.ChainId),
+		signer:            types.NewEIP155Signer(chainconfig.ChainID),
 		pending:           make(map[common.Address]*txList),
 		queue:             make(map[common.Address]*txList),
 		beats:             make(map[common.Address]time.Time),
@@ -272,7 +273,6 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		pendingTxPreEvent: make(map[common.Hash]*TxPreEvent),
 		relayTxInfo:       make(map[common.Hash]*RelayInfo),
 		gasPrice:          new(big.Int).SetUint64(config.PriceLimit),
-		initTxCount:       0,
 		flowLimit:         false,
 		appConsumer:       false,
 		hasCachedTxs:      false,
@@ -285,7 +285,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
 
-		if err := pool.journal.load(pool.AddLocalCheck); err != nil { //don't call addTx because PosTable has not init yet
+		if err := pool.journal.load(pool.AddLocalsCheck); err != nil { //don't call addTx because PosTable has not init yet
 			log.Warn("Failed to load transaction journal", "err", err)
 		}
 		if err := pool.journal.rotate(pool.local()); err != nil {
@@ -560,6 +560,15 @@ func (pool *TxPool) State() *state.ManagedState {
 	return pool.pendingState
 }
 
+// Nonce returns the next nonce of an account, with all transactions executable
+// by the pool already applied on top.
+func (pool *TxPool) Nonce(addr common.Address) uint64 {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
+	return pool.pendingState.GetNonce(addr)
+}
+
 // Stats retrieves the current pool stats, namely the number of pending and the
 // number of queued (non-executable) transactions.
 func (pool *TxPool) Stats() (int, int) {
@@ -628,6 +637,13 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 		}
 	}
 	return txs
+}
+
+func (pool *TxPool) Locals() []common.Address {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	return pool.locals.flatten()
 }
 
 // validateTx checks whether a transaction is valid according to the consensus
@@ -752,7 +768,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	hash := tx.Hash()
 	if pool.all[hash] != nil {
 		log.Trace("Discarding already known transaction", "hash", hash)
-		return false, fmt.Errorf("known transaction: %x", hash)
+		return false, ErrAlreadyKnown
 	}
 	// If the transaction fails basic validation, discard it
 	if err := pool.validateTx(tx, local); err != nil {
@@ -943,24 +959,30 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 }
 
 // AddLocalCheck is called in NewTxPool
-func (pool *TxPool) AddLocalCheck(tx *types.Transaction) error {
-	if pool.initTxCount < cachedTxSize {
-		pool.initTxCount++
-		pool.mu.Lock()
-		defer pool.mu.Unlock()
+func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
+	errs = make([]error, len(txs))
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	for i, tx := range txs {
+		if i > cachedTxSize {
+			errs[i] = fmt.Errorf("tx count %v excceeds cachedTxSize %v", i, cachedTxSize)
+			continue
+		}
 		// Try to inject the transaction and update any state
 		replace, err := pool.add(tx, true)
 		if err != nil {
-			return err
+			errs[i] = err
+			continue
 		}
 		// If we added a new transaction, run promotion checks and return
 		if !replace {
 			from, _ := types.Sender(pool.signer, tx) // already validated
 			pool.promoteExecutables([]common.Address{from})
 		}
-		return nil
+		errs[i] = nil
 	}
-	return fmt.Errorf("Discard tx %v for exceeding channel size", tx.Hash())
+	return
 }
 
 func (pool *TxPool) IsFlowControlOpen() bool {
@@ -1201,6 +1223,14 @@ func (pool *TxPool) Get(hash common.Hash) *types.Transaction {
 	defer pool.mu.RUnlock()
 
 	return pool.all[hash]
+}
+
+func (pool *TxPool) Has(hash common.Hash) bool {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
+	_, ok := pool.all[hash]
+	return ok
 }
 
 // removeTx removes a single transaction from the queue, moving all subsequent
@@ -1518,15 +1548,20 @@ func (a addresssByHeartbeat) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 type accountSet struct {
 	accounts map[common.Address]struct{}
 	signer   types.Signer
+	cache    *[]common.Address
 }
 
 // newAccountSet creates a new address set with an associated signer for sender
 // derivations.
-func newAccountSet(signer types.Signer) *accountSet {
-	return &accountSet{
+func newAccountSet(signer types.Signer, addrs ...common.Address) *accountSet {
+	as := &accountSet{
 		accounts: make(map[common.Address]struct{}),
 		signer:   signer,
 	}
+	for _, addr := range addrs {
+		as.add(addr)
+	}
+	return as
 }
 
 // contains checks if a given address is contained within the set.
@@ -1547,4 +1582,33 @@ func (as *accountSet) containsTx(tx *types.Transaction) bool {
 // add inserts a new address into the set to track.
 func (as *accountSet) add(addr common.Address) {
 	as.accounts[addr] = struct{}{}
+	as.cache = nil
+}
+
+// addTx adds the sender of tx into the set.
+func (as *accountSet) addTx(tx *types.Transaction) {
+	if addr, err := types.Sender(as.signer, tx); err == nil {
+		as.add(addr)
+	}
+}
+
+// flatten returns the list of addresses within this set, also caching it for later
+// reuse. The returned slice should not be changed!
+func (as *accountSet) flatten() []common.Address {
+	if as.cache == nil {
+		accounts := make([]common.Address, 0, len(as.accounts))
+		for account := range as.accounts {
+			accounts = append(accounts, account)
+		}
+		as.cache = &accounts
+	}
+	return *as.cache
+}
+
+// merge adds all addresses from the 'other' set into 'as'.
+func (as *accountSet) merge(other *accountSet) {
+	for addr := range other.accounts {
+		as.accounts[addr] = struct{}{}
+	}
+	as.cache = nil
 }

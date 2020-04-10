@@ -29,7 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-var maxPrice = big.NewInt(500 * params.Shannon)
+var maxPrice = big.NewInt(500 * params.GWei)
 
 type Config struct {
 	Blocks     int
@@ -139,7 +139,7 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	if price.Cmp(maxPrice) > 0 {
 		price = new(big.Int).Set(maxPrice)
 	}
-	close(ch)
+
 	gpo.cacheLock.Lock()
 	gpo.lastHead = headHash
 	gpo.lastPrice = price
