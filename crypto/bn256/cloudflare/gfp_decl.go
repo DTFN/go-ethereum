@@ -5,7 +5,9 @@ package bn256
 // This file contains forward declarations for the architecture-specific
 // assembly implementations of these functions, provided that they exist.
 
-import "golang.org/x/sys/cpu"
+import (
+	"golang.org/x/sys/cpu"
+)
 
 //nolint:varcheck
 var hasBMI2 = cpu.X86.HasBMI2
