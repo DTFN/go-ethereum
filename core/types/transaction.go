@@ -483,12 +483,12 @@ type TxInfo struct {
 }
 
 //custom signed data: rlp(one extra address + Transaction fields)
-func DeriveSigner(extra common.Address, tx *Transaction) (txSigner common.Address, err error) {
+func DeriveRelayer(extra common.Address, tx *Transaction) (txSigner common.Address, err error) {
 	var signer Signer = HomesteadSigner{}
 	if tx.Protected() {
 		signer = NewEIP155Signer(tx.ChainId())
 	}
-	txSigner, err = signer.CustomSender(tx, extra)
+	txSigner, err = signer.RelaySigner(tx, extra)
 	return
 }
 

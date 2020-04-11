@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
 	"gopkg.in/urfave/cli.v1"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 var (
@@ -68,6 +69,30 @@ It expects the genesis file as argument.`,
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
 The dumpgenesis command dumps the genesis block configuration in JSON format to stdout.`,
+	}
+	printGenesisConfigCommand = cli.Command{
+		Action:    utils.MigrateFlags(printGenesisConfig),
+		Name:      "printconfig",
+		Usage:     "print before upgrade genesis config",
+		ArgsUsage: "",
+		Flags: []cli.Flag{
+			utils.DataDirFlag,
+		},
+		Category: "BLOCKCHAIN COMMANDS",
+		Description: `
+The printGenesisConfigCommand command displays stored genesis config.`,
+	}
+	setGenesisConfigCommand = cli.Command{
+		Action:    utils.MigrateFlags(setGenesisConfig),
+		Name:      "setconfig",
+		Usage:     "upgrade genesis config to support all latest instructions in EVM",
+		ArgsUsage: "",
+		Flags: []cli.Flag{
+			utils.DataDirFlag,
+		},
+		Category: "BLOCKCHAIN COMMANDS",
+		Description: `
+The setGenesisConfig command is used to upgrade supported evm instruction set.`,
 	}
 	importCommand = cli.Command{
 		Action:    utils.MigrateFlags(importChain),
@@ -247,6 +272,59 @@ func dumpGenesis(ctx *cli.Context) error {
 	if err := json.NewEncoder(os.Stdout).Encode(genesis); err != nil {
 		utils.Fatalf("could not encode genesis")
 	}
+	return nil
+}
+
+func printGenesisConfig(ctx *cli.Context) error {
+	// Open an initialise both full and light databases
+	stack := makeFullNode(ctx)
+	defer stack.Close()
+	nodeConfig := stack.Config()
+	nodeConfig.Name = "gelchain"
+	db, err := stack.OpenDatabase("chaindata", 0, 0, "")
+	if err != nil {
+		utils.Fatalf("Failed to open database: %v", err)
+	}
+	stored := rawdb.ReadCanonicalHash(db, 0)
+	if (stored == common.Hash{}) {
+		log.Error("No genesis block! No need to reset config!")
+		return fmt.Errorf("No genesis block! No need to reset config! ")
+	}
+	storedcfg := rawdb.ReadChainConfig(db, stored)
+	if storedcfg == nil {
+		log.Error("Found genesis block without chain config!")
+		return fmt.Errorf("Found genesis block without chain config! ")
+	}
+	fmt.Printf("storedcfg %v \n", storedcfg)
+	return nil
+}
+
+func setGenesisConfig(ctx *cli.Context) error {
+	// Open an initialise both full and light databases
+	stack := makeFullNode(ctx)
+	defer stack.Close()
+	nodeConfig := stack.Config()
+	nodeConfig.Name = "gelchain"
+	db, err := stack.OpenDatabase("chaindata", 0, 0, "")
+	if err != nil {
+		utils.Fatalf("Failed to open database: %v", err)
+	}
+	stored := rawdb.ReadCanonicalHash(db, 0)
+	if (stored == common.Hash{}) {
+		log.Error("No genesis block! No need to reset config!")
+		return fmt.Errorf("No genesis block! No need to reset config! ")
+	}
+	storedcfg := rawdb.ReadChainConfig(db, stored)
+	if storedcfg == nil {
+		log.Error("Found genesis block without chain config!")
+		return fmt.Errorf("Found genesis block without chain config! ")
+	}
+	upgradeConfig := params.AllEthashProtocolChanges
+	upgradeConfig.ChainID = storedcfg.ChainID
+	upgradeConfig.Ethash = storedcfg.Ethash //we do not use ethash
+	upgradeConfig.Clique = storedcfg.Clique //we do not use clique either
+	fmt.Printf("storedcfg %v \n updated to \n AllEthashProtocolChanges %v \n", storedcfg, params.AllEthashProtocolChanges)
+	rawdb.WriteChainConfig(db, stored, params.AllEthashProtocolChanges)
 	return nil
 }
 

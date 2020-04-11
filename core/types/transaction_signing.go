@@ -98,9 +98,9 @@ type Signer interface {
 	SignatureValues(tx *Transaction, sig []byte) (r, s, v *big.Int, err error)
 	// Hash returns the hash to be signed.
 	Hash(tx *Transaction) common.Hash
-	// Custom sender returns the signer of the HashWithFrom
-	CustomSender(tx *Transaction, from common.Address) (common.Address, error)
-	// The custom rule is sign an extra address plus the tx
+	// RelaySigner returns the signer of the HashWithFrom
+	RelaySigner(tx *Transaction, from common.Address) (common.Address, error)
+	// The rule is the relayer signs the client address plus the tx to indicate his intent to relay the tx
 	HashWithFrom(tx *Transaction, from common.Address) common.Hash
 	// Equal returns true if the given signer is the same as the receiver.
 	Equal(Signer) bool
@@ -140,7 +140,7 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	return recoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true)
 }
 
-func (s EIP155Signer) CustomSender(tx *Transaction, from common.Address) (common.Address, error) {
+func (s EIP155Signer) RelaySigner(tx *Transaction, from common.Address) (common.Address, error) {
 	if !tx.Protected() {
 		return HomesteadSigner{}.Sender(tx)
 	}
@@ -260,7 +260,7 @@ func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
 	return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
 }
 
-func (fs FrontierSigner) CustomSender(tx *Transaction, from common.Address) (common.Address, error) {
+func (fs FrontierSigner) RelaySigner(tx *Transaction, from common.Address) (common.Address, error) {
 	return recoverPlain(fs.HashWithFrom(tx, from), tx.data.R, tx.data.S, tx.data.V, false)
 }
 
