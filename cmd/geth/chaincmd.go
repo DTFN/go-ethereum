@@ -323,8 +323,8 @@ func setGenesisConfig(ctx *cli.Context) error {
 	upgradeConfig.ChainID = storedcfg.ChainID
 	upgradeConfig.Ethash = storedcfg.Ethash //we do not use ethash
 	upgradeConfig.Clique = storedcfg.Clique //we do not use clique either
-	fmt.Printf("storedcfg %v \n updated to \n AllEthashProtocolChanges %v \n", storedcfg, params.AllEthashProtocolChanges)
-	rawdb.WriteChainConfig(db, stored, params.AllEthashProtocolChanges)
+	fmt.Printf("storedcfg %v \n updated to \n upgradeConfig %v \n", storedcfg, upgradeConfig)
+	rawdb.WriteChainConfig(db, stored, upgradeConfig)
 	return nil
 }
 
