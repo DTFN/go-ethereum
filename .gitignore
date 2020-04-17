@@ -46,7 +46,4 @@ profile.cov
 
 **/yarn-error.log
 
-#ignore go.module
-go.mod
-go.sum
 vendor
