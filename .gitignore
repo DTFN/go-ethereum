@@ -45,3 +45,8 @@ profile.cov
 /dashboard/assets/package-lock.json
 
 **/yarn-error.log
+
+#ignore go.module
+go.mod
+go.sum
+vendor
