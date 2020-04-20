@@ -1292,6 +1292,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	// Fetch the transaction we wish to delete
 	tx, ok := pool.all[hash]
 	if !ok {
+		fmt.Printf("TxPool: remove tx %X not exist! \n", hash)
 		return
 	}
 	var signer types.Signer = types.HomesteadSigner{}
