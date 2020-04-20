@@ -764,6 +764,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	return nil
 }
+
 func (pool *TxPool) ValidateExist(hash common.Hash) bool {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
@@ -1004,6 +1005,9 @@ func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
 			continue
 		}
 		// If we added a new transaction, run promotion checks and return
+		txPreEvent := &TxPreEvent{}
+		pool.pendingTxPreEvent[tx.Hash()] = txPreEvent
+		// If we added a new transaction, run promotion checks and return
 		if !replace {
 			var signer types.Signer = types.HomesteadSigner{}
 			if tx.Protected() {
@@ -1012,7 +1016,8 @@ func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
 			from, _ := types.Sender(signer, tx) // already validated
 			pool.promoteExecutables([]common.Address{from})
 		}
-		errs[i] = nil
+		delete(pool.pendingTxPreEvent, tx.Hash())
+		errs[i] = nil //we cannot wait for txPreEvent.Result at this time
 	}
 	return
 }
@@ -1294,7 +1299,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 		signer = pool.signer
 	}
 	addr, _ := types.Sender(signer, tx) // already validated during insertion
-
+	fmt.Printf("TxPool: remove tx %X for addr %X \n", hash, addr)
 	// Remove it from the list of known transactions
 	delete(pool.all, hash)
 	delete(pool.relayTxInfo, hash)
@@ -1317,6 +1322,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 			// Update the account nonce if needed
 			if nonce := tx.Nonce(); pool.pendingState.GetNonce(addr) > nonce {
 				pool.pendingState.SetNonce(addr, nonce)
+				fmt.Printf("TxPool: addr %X nonce decreases to %v \n", addr, nonce)
 			}
 			return
 		}
