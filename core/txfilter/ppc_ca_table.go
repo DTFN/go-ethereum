@@ -13,13 +13,13 @@ var (
 // TODO: merge this map into PosTable
 type AuthTable struct {
 	AuthItemMap         map[common.Address]*AuthItem `json:"auth_item_map"`
-	RevertAuthTable     *RevertAuthTable             `json:"-"` //store it in another place, for the struct has been stored in the production version
+	ExtendAuthTable     *ExtendAuthTable             `json:"-"` //store it in another place, for the struct has been stored in the production version
 	ThisBlockChangedMap map[string]bool              `json:"-"` //key is tm_address, value is true means let tm add this item, else means let it remove this item
 }
 
 // TODO: merge this map into AuthTable
-type RevertAuthTable struct {
-	TmAddressToSignerMap map[string]common.Address `json:"tm_address_signer_map"` //TODO: do not persist this, add a tm_address field in AuthItem
+type ExtendAuthTable struct {
+	SignerToTmAddressMap map[common.Address]string `json:"signer_to_tm_address_map"`
 }
 
 type AuthItem struct {
@@ -50,8 +50,8 @@ func CreateAuthTable() *AuthTable {
 func NewAuthTable() *AuthTable {
 	return &AuthTable{
 		AuthItemMap: make(map[common.Address]*AuthItem),
-		RevertAuthTable: &RevertAuthTable{
-			TmAddressToSignerMap: make(map[string]common.Address),
+		ExtendAuthTable: &ExtendAuthTable{
+			SignerToTmAddressMap: make(map[common.Address]string),
 		},
 		ThisBlockChangedMap: make(map[string]bool),
 	}
@@ -62,8 +62,8 @@ func (authTable *AuthTable) Copy() *AuthTable {
 	for addr, authItem := range authTable.AuthItemMap {
 		copyAuthTable.AuthItemMap[addr] = authItem.Copy()
 	}
-	for tmAddr, signer := range authTable.RevertAuthTable.TmAddressToSignerMap {
-		copyAuthTable.RevertAuthTable.TmAddressToSignerMap[tmAddr] = signer
+	for tmAddr, signer := range authTable.ExtendAuthTable.SignerToTmAddressMap {
+		copyAuthTable.ExtendAuthTable.SignerToTmAddressMap[tmAddr] = signer
 	}
 	return copyAuthTable
 }
@@ -78,6 +78,17 @@ func (authTable *AuthTable) InsertAuthItem(permittedAddr common.Address, pi *Aut
 	return nil
 }
 
+func (authTable *AuthTable) InsertAuthItemWithTmAddr(permittedAddr common.Address, pi *AuthItem, tmAddress string) error {
+	fmt.Printf("insert pmi %v for permittedAddr %X", pi, permittedAddr)
+	NextPosTable.ChangedFlagThisBlock = true
+	if _, ok := authTable.AuthItemMap[permittedAddr]; ok {
+		return fmt.Errorf("InsertAuthItem, permittedAddr %X already exists", permittedAddr)
+	}
+	authTable.AuthItemMap[permittedAddr] = pi
+	authTable.ExtendAuthTable.SignerToTmAddressMap[permittedAddr]=tmAddress
+	return nil
+}
+
 func (authTable *AuthTable) DeleteAuthItem(permittedAddr common.Address) error {
 	fmt.Printf("delete pmi for permittedAddr %X", permittedAddr)
 	if _, ok := authTable.AuthItemMap[permittedAddr]; !ok {
@@ -86,21 +97,6 @@ func (authTable *AuthTable) DeleteAuthItem(permittedAddr common.Address) error {
 	}
 	NextPosTable.ChangedFlagThisBlock = true
 	delete(authTable.AuthItemMap, permittedAddr)
-	return nil
-}
-
-func (authTable *AuthTable) InsertTmAddrSignerPair(tmAddr string, permittedAddr common.Address) error {
-	if _, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddr]; ok {
-		return fmt.Errorf("InsertTmAddrSignerPair, tmAddr %X already exists", tmAddr)
-	}
-	authTable.RevertAuthTable.TmAddressToSignerMap[tmAddr] = permittedAddr
-	return nil
-}
-
-func (authTable *AuthTable) DeleteTmAddrSignerPair(tmAddr string) error {
-	if storedSigner, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddr]; !ok {
-		return fmt.Errorf("DeleteTmAddrSignerPair, tmAddr %X does not exists", tmAddr)
-	}
-	delete(authTable.RevertAuthTable.TmAddressToSignerMap, tmAddr)
+	delete(authTable.ExtendAuthTable.SignerToTmAddressMap, permittedAddr)
 	return nil
 }

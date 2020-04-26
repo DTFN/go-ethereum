@@ -142,6 +142,12 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
 						return fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
 					}
+					if AppVersion >= 5 {
+						_, ok := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
+						if !ok {
+							panic( fmt.Errorf("authed signer %X not exist in SignerToTmAddressMap", from))
+						}
+					}
 					currentSlots = int64(10)
 				}
 				if 1 > currentSlots {
@@ -171,15 +177,6 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 				signer, exist = posTable.BlsKeyStringToSignerMap[txData.BlsKeyString]
 				if exist {
 					return fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
-				}
-				if AppVersion >= 5 {
-					authedSigner, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddress]
-					if !ok {
-						return fmt.Errorf("authed tmAddress %X not exist ", tmAddress)
-					}
-					if from != authedSigner {
-						return fmt.Errorf("the signer %v not match with the signer %X of authed tmAddress %X", from, authedSigner, tmAddress)
-					}
 				}
 			}
 		}
@@ -319,17 +316,14 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 						return true, fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
 					}
 					if AppVersion >= 5 {
-						authedSigner, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddress]
+						_, ok := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
 						if !ok {
-							return true, fmt.Errorf("authed tmAddress %X not exist ", tmAddress)
-						}
-						if from != authedSigner {
-							return true, fmt.Errorf("the signer %v not match with the signer %X of authed tmAddress %X", from, authedSigner, tmAddress)
+							panic( fmt.Errorf("authed signer %X not exist in SignerToTmAddressMap", from))
 						}
 					}
 					currentSlots = int64(10)
 					delete(authTable.AuthItemMap, from) //delete the auth item when it joins PosTable
-					delete(authTable.RevertAuthTable.TmAddressToSignerMap, tmAddress)
+					delete(authTable.ExtendAuthTable.SignerToTmAddressMap, from)
 				}
 				if 1 > currentSlots {
 					fmt.Println(currentSlots)

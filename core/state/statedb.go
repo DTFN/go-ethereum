@@ -819,7 +819,7 @@ func (s *StateDB) InitAuthTable() (*txfilter.AuthTable) {
 			panic("len(TmAddressToSignerData) == 0")
 		} else {
 			fmt.Printf("TmAddressToSignerData Not nil \n")
-			err := json.Unmarshal(TmAddressToSignerData, &txfilter.EthAuthTable.RevertAuthTable)
+			err := json.Unmarshal(TmAddressToSignerData, &txfilter.EthAuthTable.ExtendAuthTable)
 			if err != nil {
 				panic(fmt.Sprintf("Unmarshal TmAddressToSignerData error %v", err))
 			}

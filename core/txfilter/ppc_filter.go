@@ -58,14 +58,13 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64, sim bo
 				return fmt.Errorf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
 			}
 			if len(ppcdata.TmAddress) != 0 {
-				ppcdata.TmAddress = strings.ToUpper(ppcdata.TmAddress)
-				if _, ok := authTable.RevertAuthTable.TmAddressToSignerMap[ppcdata.TmAddress]; ok {
-					return fmt.Errorf("tmAddr %X already exists in AuthTable", ppcdata.TmAddress)
+				if AppVersion >= 5 {
+					return fmt.Errorf("ppcdata.TmAddress is required after appversion 5 ")
 				}
-			} else {
-				for _, signer := range authTable.RevertAuthTable.TmAddressToSignerMap {
-					if signer == ppcdata.PermittedAddress {
-						return fmt.Errorf("signer %X has authed some tmAddr, please send! ", ppcdata.TmAddress)
+				ppcdata.TmAddress = strings.ToUpper(ppcdata.TmAddress)
+				for _, tmAddr := range authTable.ExtendAuthTable.SignerToTmAddressMap {
+					if tmAddr == ppcdata.TmAddress {
+						return fmt.Errorf("TmAddressToSignerMap already contains this addr %v ", ppcdata.TmAddress)
 					}
 				}
 			}
@@ -74,18 +73,6 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64, sim bo
 	} else if ppcdata.OperationType == "remove" {
 		if _, exist := authTable.AuthItemMap[ppcdata.PermittedAddress]; !exist {
 			return fmt.Errorf("removePermitItem in auth check, permittedAddr %X not exists", ppcdata.PermittedAddress)
-		}
-		if AppVersion >= 5 {
-			foundTmAddress := false
-			for _, signer := range authTable.RevertAuthTable.TmAddressToSignerMap {
-				if signer == ppcdata.PermittedAddress {
-					foundTmAddress = true
-					break
-				}
-			}
-			if !foundTmAddress {
-				fmt.Printf("TmAddressToSignerMap does not find %v !", ppcdata.PermittedAddress)
-			}
 		}
 		return
 	} else if ppcdata.OperationType == "kickout" {
@@ -133,27 +120,31 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 			fmt.Printf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
 			return fmt.Errorf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
 		}
-		if AppVersion >= 5 {
-			if len(ppcdata.TmAddress) == 0 {
-				return fmt.Errorf("ppcdata.TmAddress is required after appversion 5 ")
-			}
-			ppcdata.TmAddress = strings.ToUpper(ppcdata.TmAddress)
-			if err = authTable.InsertTmAddrSignerPair(ppcdata.TmAddress, ppcdata.PermittedAddress); err != nil {
-				return fmt.Errorf("tmAddr %X already exists in AuthTable", ppcdata.TmAddress)
-			}
-			authTable.ThisBlockChangedMap[ppcdata.TmAddress] = true
-		}
-
 		authItem = &AuthItem{
 			ApprovedTxDataHash: ppcdata.ApprovedTxDataHash,
 			StartHeight:        ppcdata.StartBlockHeight,
 			EndHeight:          ppcdata.EndBlockHeight,
 			PermitHeight:       height,
 		}
-		if err = authTable.InsertAuthItem(ppcdata.PermittedAddress, authItem); err != nil {
-			panic(err) //we have checked this before, this should not happen
+		if AppVersion >= 5 {
+			if len(ppcdata.TmAddress) == 0 {
+				return fmt.Errorf("ppcdata.TmAddress is required after appversion 5 ")
+			}
+			ppcdata.TmAddress = strings.ToUpper(ppcdata.TmAddress)
+			for _, tmAddr := range authTable.ExtendAuthTable.SignerToTmAddressMap {
+				if tmAddr == ppcdata.TmAddress {
+					return fmt.Errorf("TmAddressToSignerMap already contains this addr %v ", ppcdata.TmAddress)
+				}
+			}
+			authTable.ThisBlockChangedMap[ppcdata.TmAddress] = true
+			if err = authTable.InsertAuthItemWithTmAddr(ppcdata.PermittedAddress, authItem, ppcdata.TmAddress); err != nil {
+				panic(err) //we have checked this before, this should not happen
+			}
+		} else {
+			if err = authTable.InsertAuthItem(ppcdata.PermittedAddress, authItem); err != nil {
+				panic(err) //we have checked this before, this should not happen
+			}
 		}
-
 		return
 	} else if ppcdata.OperationType == "remove" {
 		_, exist := authTable.AuthItemMap[ppcdata.PermittedAddress]
@@ -161,23 +152,9 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 			fmt.Printf("addr %X has not been permitted ", ppcdata.PermittedAddress)
 			return fmt.Errorf("addr %X has not been permitted ", ppcdata.PermittedAddress)
 		}
-		if AppVersion >= 5 {
-			foundTmAddress := false
-			for tmAddress, signer := range authTable.RevertAuthTable.TmAddressToSignerMap {
-				if signer == ppcdata.PermittedAddress {
-					delete(authTable.RevertAuthTable.TmAddressToSignerMap, tmAddress)
-					foundTmAddress = true
-					authTable.ThisBlockChangedMap[tmAddress] = false
-					break
-				}
-			}
-			if !foundTmAddress {
-				fmt.Printf("TmAddressToSignerMap does not find %v !", ppcdata.PermittedAddress)
-			}
-		}
 
 		if err = authTable.DeleteAuthItem(ppcdata.PermittedAddress); err != nil {
-			panic(err) //AuthItemMap should be consistent with RevertAuthItemMap
+			panic(err)
 		}
 		return
 	} else if ppcdata.OperationType == "kickout" {
