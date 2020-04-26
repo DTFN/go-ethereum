@@ -97,11 +97,9 @@ func (authTable *AuthTable) InsertTmAddrSignerPair(tmAddr string, permittedAddr 
 	return nil
 }
 
-func (authTable *AuthTable) DeleteTmAddrSignerPair(tmAddr string, permittedAddr common.Address) error {
+func (authTable *AuthTable) DeleteTmAddrSignerPair(tmAddr string) error {
 	if storedSigner, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddr]; !ok {
 		return fmt.Errorf("DeleteTmAddrSignerPair, tmAddr %X does not exists", tmAddr)
-	} else if storedSigner != permittedAddr {
-		return fmt.Errorf("storedSigner %v not match with from %v", storedSigner, permittedAddr)
 	}
 	delete(authTable.RevertAuthTable.TmAddressToSignerMap, tmAddr)
 	return nil
