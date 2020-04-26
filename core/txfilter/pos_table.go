@@ -258,14 +258,7 @@ func (posTable *PosTable) TryRemoveUnbondPosItems(currentHeight int64, sortedUnb
 			count++
 
 			//record every Unbound Peer for removing
-			EthAuthTable.ThisBlockChangedMap[signer] = &AuthTmItem{
-				ApprovedTxData: TxData{
-					PubKey:       posItem.PubKey,
-					Beneficiary:  posItem.Beneficiary.String(),
-					BlsKeyString: posItem.BlsKeyString,
-				},
-				Type: "remove",
-			}
+			EthAuthTable.ThisBlockChangedMap[posItem.TmAddress] = false
 		} else {
 			break
 		}

@@ -172,6 +172,15 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 				if exist {
 					return fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
+				if AppVersion >= 5 {
+					authedSigner, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddress]
+					if !ok {
+						return fmt.Errorf("authed tmAddress %X not exist ", tmAddress)
+					}
+					if from != authedSigner {
+						return fmt.Errorf("the signer %v not match with the signer %X of authed tmAddress %X", from, authedSigner, tmAddress)
+					}
+				}
 			}
 		}
 	}
@@ -305,8 +314,22 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 					if height > authItem.EndHeight {
 						return true, fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
 					}
+					if tmHash := crypto.Keccak256(txDataBytes); !bytes.Equal(tmHash, authItem.ApprovedTxDataHash) {
+						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
+						return true, fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
+					}
+					if AppVersion >= 5 {
+						authedSigner, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddress]
+						if !ok {
+							return true, fmt.Errorf("authed tmAddress %X not exist ", tmAddress)
+						}
+						if from != authedSigner {
+							return true, fmt.Errorf("the signer %v not match with the signer %X of authed tmAddress %X", from, authedSigner, tmAddress)
+						}
+					}
 					currentSlots = int64(10)
 					delete(authTable.AuthItemMap, from) //delete the auth item when it joins PosTable
+					delete(authTable.RevertAuthTable.TmAddressToSignerMap, tmAddress)
 				}
 				if 1 > currentSlots {
 					fmt.Println(currentSlots)

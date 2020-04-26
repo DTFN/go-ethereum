@@ -1005,9 +1005,6 @@ func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
 			continue
 		}
 		// If we added a new transaction, run promotion checks and return
-		txPreEvent := &TxPreEvent{}
-		pool.pendingTxPreEvent[tx.Hash()] = txPreEvent
-		// If we added a new transaction, run promotion checks and return
 		if !replace {
 			var signer types.Signer = types.HomesteadSigner{}
 			if tx.Protected() {
@@ -1016,8 +1013,7 @@ func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
 			from, _ := types.Sender(signer, tx) // already validated
 			pool.promoteExecutables([]common.Address{from})
 		}
-		delete(pool.pendingTxPreEvent, tx.Hash())
-		errs[i] = nil //we cannot wait for txPreEvent.Result at this time
+		errs[i] = nil
 	}
 	return
 }
