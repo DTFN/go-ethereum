@@ -315,15 +315,8 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
 						return true, fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
 					}
-					if AppVersion >= 5 {
-						_, ok := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
-						if !ok {
-							panic( fmt.Errorf("authed signer %X not exist in SignerToTmAddressMap", from))
-						}
-					}
 					currentSlots = int64(10)
-					delete(authTable.AuthItemMap, from) //delete the auth item when it joins PosTable
-					delete(authTable.ExtendAuthTable.SignerToTmAddressMap, from)
+					authTable.DeleteAuthItem(from)
 				}
 				if 1 > currentSlots {
 					fmt.Println(currentSlots)
