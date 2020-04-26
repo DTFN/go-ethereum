@@ -137,19 +137,17 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 				fmt.Printf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
 				return fmt.Errorf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
 			}
-			if len(ppcdata.TmAddress) != 0 {
+			if AppVersion >= 5 {
+				if len(ppcdata.TmAddress) == 0 {
+					return fmt.Errorf("ppcdata.TmAddress is required after appversion 5 ")
+				}
 				ppcdata.TmAddress = strings.ToUpper(ppcdata.TmAddress)
 				if err = authTable.InsertTmAddrSignerPair(ppcdata.TmAddress, ppcdata.PermittedAddress); err != nil {
 					return fmt.Errorf("tmAddr %X already exists in AuthTable", ppcdata.TmAddress)
 				}
 				authTable.ThisBlockChangedMap[ppcdata.TmAddress] = true
-			} else {
-				for _, signer := range authTable.RevertAuthTable.TmAddressToSignerMap {
-					if signer == ppcdata.PermittedAddress {
-						return fmt.Errorf("signer %X has authed some tmAddr, please send! ", ppcdata.TmAddress)
-					}
-				}
 			}
+
 			authItem = &AuthItem{
 				ApprovedTxDataHash: ppcdata.ApprovedTxDataHash,
 				StartHeight:        ppcdata.StartBlockHeight,
@@ -163,24 +161,15 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 			return
 		}
 	} else if ppcdata.OperationType == "remove" {
-		if len(ppcdata.TmAddress) != 0 {
+		if AppVersion >= 5 {
+			if len(ppcdata.TmAddress) == 0 {
+				return fmt.Errorf("ppcdata.TmAddress is required after appversion 5 ")
+			}
 			ppcdata.TmAddress = strings.ToUpper(ppcdata.TmAddress)
-			if signer, exist := authTable.RevertAuthTable.TmAddressToSignerMap[ppcdata.TmAddress]; exist {
-				if signer != ppcdata.PermittedAddress {
-					return fmt.Errorf("ppcdata.PermittedAddress %X did not auth this tmAddr %v", ppcdata.PermittedAddress, ppcdata.TmAddress)
-				} else if err = authTable.DeleteTmAddrSignerPair(ppcdata.TmAddress); err != nil {
-					panic(err)
-				}
-				authTable.ThisBlockChangedMap[ppcdata.TmAddress] = false
-			} else {
-				return fmt.Errorf("ppcdata.TmAddress %X does not exist ", ppcdata.TmAddress)
+			if err = authTable.DeleteTmAddrSignerPair(ppcdata.TmAddress, from); err != nil {
+				return err
 			}
-		} else {
-			for _, signer := range authTable.RevertAuthTable.TmAddressToSignerMap {
-				if signer == ppcdata.PermittedAddress {
-					return fmt.Errorf("ppcdata.PermittedAddress %X has authed some tmAddr, please send! ", ppcdata.PermittedAddress)
-				}
-			}
+			authTable.ThisBlockChangedMap[ppcdata.TmAddress] = true
 		}
 
 		if err = authTable.DeleteAuthItem(ppcdata.PermittedAddress); err != nil {

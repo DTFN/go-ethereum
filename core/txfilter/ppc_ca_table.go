@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	EthAuthTable           *AuthTable
-	EthAuthTableCopy       *AuthTable
+	EthAuthTable     *AuthTable
+	EthAuthTableCopy *AuthTable
 )
 
 // TODO: merge this map into PosTable
@@ -57,7 +57,7 @@ func NewAuthTable() *AuthTable {
 	}
 }
 
-func (authTable *AuthTable) Copy() *AuthTable{
+func (authTable *AuthTable) Copy() *AuthTable {
 	copyAuthTable := NewAuthTable()
 	for addr, authItem := range authTable.AuthItemMap {
 		copyAuthTable.AuthItemMap[addr] = authItem.Copy()
@@ -97,9 +97,11 @@ func (authTable *AuthTable) InsertTmAddrSignerPair(tmAddr string, permittedAddr 
 	return nil
 }
 
-func (authTable *AuthTable) DeleteTmAddrSignerPair(tmAddr string) error {
-	if _, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddr]; !ok {
+func (authTable *AuthTable) DeleteTmAddrSignerPair(tmAddr string, permittedAddr common.Address) error {
+	if storedSigner, ok := authTable.RevertAuthTable.TmAddressToSignerMap[tmAddr]; !ok {
 		return fmt.Errorf("DeleteTmAddrSignerPair, tmAddr %X does not exists", tmAddr)
+	} else if storedSigner != permittedAddr {
+		return fmt.Errorf("storedSigner %v not match with from %v", storedSigner, permittedAddr)
 	}
 	delete(authTable.RevertAuthTable.TmAddressToSignerMap, tmAddr)
 	return nil
