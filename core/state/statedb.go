@@ -805,7 +805,7 @@ func (s *StateDB) InitAuthTable() (*txfilter.AuthTable) {
 			panic(fmt.Sprintf("Unmarshal AuthTable error %v", err))
 		}
 	}
-	key := []byte("TmAddressToSignerMap")
+	key := []byte("ExtendAuthTable")
 	keyHash := common.BytesToHash(key)
 	valueHash := s.GetState(permitTableDataAddress, keyHash)
 	if !bytes.Equal(valueHash.Bytes(), common.Hash{}.Bytes()) {
