@@ -142,12 +142,6 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
 						return fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
 					}
-					if AppVersion >= 5 {
-						_, ok := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
-						if !ok {
-							panic( fmt.Errorf("authed signer %X not exist in SignerToTmAddressMap", from))
-						}
-					}
 					currentSlots = int64(10)
 				}
 				if 1 > currentSlots {
@@ -169,6 +163,10 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 				tmAddress := pubKey.Address().String()
 				if len(tmAddress) == 0 {
 					return fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
+				}
+				storedTMAddr, found := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
+				if found && storedTMAddr != tmAddress {
+					return fmt.Errorf("signer %X tmData addr %X not match with authed hash %X", from, tmAddress, storedTMAddr)
 				}
 				signer, exist := posTable.TmAddressToSignerMap[tmAddress]
 				if exist {
@@ -314,6 +312,10 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 					if tmHash := crypto.Keccak256(txDataBytes); !bytes.Equal(tmHash, authItem.ApprovedTxDataHash) {
 						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
 						return true, fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
+					}
+					storedTMAddr, found := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
+					if found && storedTMAddr != tmAddress {
+						return true, fmt.Errorf("signer %X tmData addr %X not match with authed hash %X", from, tmAddress, storedTMAddr)
 					}
 					currentSlots = int64(10)
 					authTable.DeleteAuthItem(from)
