@@ -157,9 +157,12 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 			tmAddress, found := authTable.ExtendAuthTable.SignerToTmAddressMap[ppcdata.PermittedAddress]
 			if !found {
 				fmt.Printf("SignerToTmAddressMap does not find %v ! ", ppcdata.PermittedAddress)
-			} else {
-				authTable.ThisBlockChangedMap[tmAddress] = false
+				if len(ppcdata.TmAddress) == 0 {
+					return fmt.Errorf("SignerToTmAddressMap does not find %v ! and ppcdata.TmAddress is empty", ppcdata.PermittedAddress)
+				}
+				tmAddress = strings.ToUpper(ppcdata.TmAddress)
 			}
+			authTable.ThisBlockChangedMap[tmAddress] = false
 		}
 		if err = authTable.DeleteAuthItem(ppcdata.PermittedAddress); err != nil {
 			panic(err)
