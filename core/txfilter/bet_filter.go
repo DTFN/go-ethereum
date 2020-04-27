@@ -166,7 +166,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 				}
 				storedTMAddr, found := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
 				if found && storedTMAddr != tmAddress {
-					return fmt.Errorf("signer %X tmData addr %X not match with authed hash %X", from, tmAddress, storedTMAddr)
+					return fmt.Errorf("signer %X tmData addr %X not match with authed addr %X", from, tmAddress, storedTMAddr)
 				}
 				signer, exist := posTable.TmAddressToSignerMap[tmAddress]
 				if exist {
@@ -315,7 +315,7 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 					}
 					storedTMAddr, found := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
 					if found && storedTMAddr != tmAddress {
-						return true, fmt.Errorf("signer %X tmData addr %X not match with authed hash %X", from, tmAddress, storedTMAddr)
+						return true, fmt.Errorf("signer %X tmData addr %X not match with authed addr %X", from, tmAddress, storedTMAddr)
 					}
 					currentSlots = int64(10)
 					authTable.DeleteAuthItem(from)
