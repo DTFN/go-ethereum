@@ -153,10 +153,18 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 			fmt.Printf("addr %X has not been permitted ", ppcdata.PermittedAddress)
 			return fmt.Errorf("addr %X has not been permitted ", ppcdata.PermittedAddress)
 		}
-
+		if AppVersion >= 5 {
+			tmAddress, found := authTable.ExtendAuthTable.SignerToTmAddressMap[ppcdata.PermittedAddress]
+			if !found {
+				fmt.Printf("SignerToTmAddressMap does not find %v ! ", ppcdata.PermittedAddress)
+			} else {
+				authTable.ThisBlockChangedMap[tmAddress] = false
+			}
+		}
 		if err = authTable.DeleteAuthItem(ppcdata.PermittedAddress); err != nil {
 			panic(err)
 		}
+
 		return
 	} else if ppcdata.OperationType == "kickout" {
 		if err := posTable.RemovePosItem(ppcdata.PermittedAddress, height, false); err != nil {
