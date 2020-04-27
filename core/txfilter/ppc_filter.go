@@ -57,10 +57,11 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64, sim bo
 				fmt.Printf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
 				return fmt.Errorf("addr %X is already in PosTable, no need to auth it ", ppcdata.PermittedAddress)
 			}
-			if len(ppcdata.TmAddress) != 0 {
+			if len(ppcdata.TmAddress) == 0 {
 				if AppVersion >= 5 {
 					return fmt.Errorf("ppcdata.TmAddress is required after appversion 5 ")
 				}
+			} else {
 				ppcdata.TmAddress = strings.ToUpper(ppcdata.TmAddress)
 				for _, tmAddr := range authTable.ExtendAuthTable.SignerToTmAddressMap {
 					if tmAddr == ppcdata.TmAddress {
