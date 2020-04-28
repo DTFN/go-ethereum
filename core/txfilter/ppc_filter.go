@@ -156,7 +156,7 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 		if AppVersion >= 5 {
 			tmAddress, found := authTable.ExtendAuthTable.SignerToTmAddressMap[ppcdata.PermittedAddress]
 			if !found {
-				fmt.Printf("Error: DoAuthHandle, SignerToTmAddressMap does not find %v ! ", ppcdata.PermittedAddress)
+				fmt.Printf("Error in DoAuthHandle: %v not exists in SignerToTmAddressMap! ", ppcdata.PermittedAddress)
 				if len(ppcdata.TmAddress) == 0 {
 					return fmt.Errorf("SignerToTmAddressMap does not find %v ! and ppcdata.TmAddress is empty", ppcdata.PermittedAddress)
 				}
