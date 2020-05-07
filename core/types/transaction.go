@@ -27,23 +27,17 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"bytes"
+	"github.com/ethereum/go-ethereum/core/txfilter"
+	"encoding/hex"
+	"fmt"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
 
 var (
 	ErrInvalidSig = errors.New("invalid transaction v, r, s values")
-	errNoSigner   = errors.New("missing signing methods")
 )
-
-// deriveSigner makes a *best* guess about which signer to use.
-func deriveSigner(V *big.Int) Signer {
-	if V.Sign() != 0 && isProtectedV(V) {
-		return NewEIP155Signer(deriveChainId(V))
-	} else {
-		return HomesteadSigner{}
-	}
-}
 
 type Transaction struct {
 	data txdata
@@ -129,7 +123,7 @@ func isProtectedV(V *big.Int) bool {
 		v := V.Uint64()
 		return v != 27 && v != 28
 	}
-	// anything not 27 or 28 are considered unprotected
+	// anything not 27 or 28 is considered protected
 	return true
 }
 
@@ -163,16 +157,21 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 	if err := dec.UnmarshalJSON(input); err != nil {
 		return err
 	}
-	var V byte
-	if isProtectedV(dec.V) {
-		chainID := deriveChainId(dec.V).Uint64()
-		V = byte(dec.V.Uint64() - 35 - 2*chainID)
-	} else {
-		V = byte(dec.V.Uint64() - 27)
+
+	withSignature := dec.V.Sign() != 0 || dec.R.Sign() != 0 || dec.S.Sign() != 0
+	if withSignature {
+		var V byte
+		if isProtectedV(dec.V) {
+			chainID := deriveChainId(dec.V).Uint64()
+			V = byte(dec.V.Uint64() - 35 - 2*chainID)
+		} else {
+			V = byte(dec.V.Uint64() - 27)
+		}
+		if !crypto.ValidateSignatureValues(V, dec.R, dec.S, false) {
+			return ErrInvalidSig
+		}
 	}
-	if !crypto.ValidateSignatureValues(V, dec.R, dec.S, false) {
-		return ErrInvalidSig
-	}
+
 	*tx = Transaction{data: dec}
 	return nil
 }
@@ -192,6 +191,11 @@ func (tx *Transaction) To() *common.Address {
 	}
 	to := *tx.data.Recipient
 	return &to
+}
+
+// SetFrom only used in custom signer recovery
+func (tx *Transaction) SetFrom(signer Signer, addr common.Address) {
+	tx.from.Store(sigCache{signer: signer, from: addr})
 }
 
 // Hash hashes the RLP encoding of tx.
@@ -238,13 +242,60 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 	return msg, err
 }
 
+func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
+	msg := Message{
+		nonce:      tx.data.AccountNonce,
+		gasLimit:   tx.data.GasLimit,
+		gasPrice:   new(big.Int).Set(tx.data.Price),
+		to:         tx.data.Recipient,
+		from:       from,
+		amount:     tx.data.Amount,
+		data:       tx.data.Payload,
+		checkNonce: true,
+	}
+	if txfilter.AppVersion >= 4 { //wipe the transfer value to 0 except bigguy and admin. We are coin-free chain!
+		if !bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && !bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) {
+			msg.amount = big.NewInt(0)
+		}
+	}
+	return msg, nil
+}
+
+// rlp decode an etherum transaction
+func DecodeTx(txBytes []byte) (*Transaction, error) {
+	tx := new(Transaction)
+	rlpStream := rlp.NewStream(bytes.NewBuffer(txBytes), 0)
+	if err := tx.DecodeRLP(rlpStream); err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+func DecodeTxFromHexBytes(hexBytes []byte) (*Transaction, error) {
+	n, err := hex.Decode(hexBytes, hexBytes)
+	if err != nil {
+		return nil, fmt.Errorf("ppc tx data is not hex bytes. %v", err)
+	}
+	tx, err := DecodeTx(hexBytes[:n])
+	if err != nil {
+		return tx, fmt.Errorf("ppc tx data is not a subTx structure. %v", err)
+	}
+	return tx, nil
+}
+
 // WithSignature returns a new transaction with the given signature.
-// This signature needs to be formatted as described in the yellow paper (v+27).
+// This signature needs to be in the [R || S || V] format where V is 0 or 1.
 func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, error) {
 	r, s, v, err := signer.SignatureValues(tx, sig)
 	if err != nil {
 		return nil, err
 	}
+	cpy := &Transaction{data: tx.data}
+	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v
+	return cpy, nil
+}
+
+func (tx *Transaction) WithVRS(v, r, s *big.Int) (*Transaction, error) {
 	cpy := &Transaction{data: tx.data}
 	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v
 	return cpy, nil
@@ -257,7 +308,9 @@ func (tx *Transaction) Cost() *big.Int {
 	return total
 }
 
-func (tx *Transaction) RawSignatureValues() (*big.Int, *big.Int, *big.Int) {
+// RawSignatureValues returns the V, R, S signature values of the transaction.
+// The return values should not be modified by the caller.
+func (tx *Transaction) RawSignatureValues() (v, r, s *big.Int) {
 	return tx.data.V, tx.data.R, tx.data.S
 }
 
@@ -276,9 +329,9 @@ func (s Transactions) GetRlp(i int) []byte {
 	return enc
 }
 
-// TxDifference returns a new set t which is the difference between a to b.
-func TxDifference(a, b Transactions) (keep Transactions) {
-	keep = make(Transactions, 0, len(a))
+// TxDifference returns a new set which is the difference between a and b.
+func TxDifference(a, b Transactions) Transactions {
+	keep := make(Transactions, 0, len(a))
 
 	remove := make(map[common.Hash]struct{})
 	for _, tx := range b {
@@ -340,11 +393,14 @@ type TransactionsByPriceAndNonce struct {
 func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions) *TransactionsByPriceAndNonce {
 	// Initialize a price based heap with the head transactions
 	heads := make(TxByPrice, 0, len(txs))
-	for _, accTxs := range txs {
+	for from, accTxs := range txs {
 		heads = append(heads, accTxs[0])
 		// Ensure the sender address is from the signer
 		acc, _ := Sender(signer, accTxs[0])
 		txs[acc] = accTxs[1:]
+		if from != acc {
+			delete(txs, from)
+		}
 	}
 	heap.Init(&heads)
 
@@ -417,3 +473,41 @@ func (m Message) Gas() uint64          { return m.gasLimit }
 func (m Message) Nonce() uint64        { return m.nonce }
 func (m Message) Data() []byte         { return m.data }
 func (m Message) CheckNonce() bool     { return m.checkNonce }
+
+//==============================
+type TxInfo struct {
+	Tx        *Transaction
+	From      common.Address
+	SubTx     *Transaction
+	RelayFrom common.Address
+}
+
+//custom signed data: rlp(one extra address + Transaction fields)
+func DeriveRelayer(extra common.Address, tx *Transaction) (txSigner common.Address, err error) {
+	var signer Signer = HomesteadSigner{}
+	if tx.Protected() {
+		signer = NewEIP155Signer(tx.ChainId())
+	}
+	txSigner, err = signer.RelaySigner(tx, extra)
+	return
+}
+
+func CheckRelayerTx(tx, subTx *Transaction) (err error) {
+	if tx.Nonce() != subTx.Nonce() {
+		fmt.Printf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
+		return fmt.Errorf("tx nonce %v not equal to sub tx nonce %v", tx.Nonce(), subTx.Nonce())
+	}
+	if tx.Value().Cmp(subTx.Value()) != 0 {
+		fmt.Printf("tx value %v not equal to sub tx value %v", tx.Value(), subTx.Value())
+		return fmt.Errorf("tx value %v not equal to sub tx value %v", tx.Value(), subTx.Value())
+	}
+	if tx.GasPrice().Cmp(subTx.GasPrice()) != 0 {
+		fmt.Printf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
+		return fmt.Errorf("tx price %v not equal to sub tx price %v", tx.GasPrice(), subTx.GasPrice())
+	}
+	if tx.Gas() != subTx.Gas() {
+		fmt.Printf("tx gasLimit %v not equal to sub tx gasLimit %v", tx.Gas(), subTx.Gas())
+		return fmt.Errorf("tx gasLimit %v not equal to sub tx gasLimit %v", tx.Gas(), subTx.Gas())
+	}
+	return
+}

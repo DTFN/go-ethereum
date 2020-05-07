@@ -1,18 +1,18 @@
 // Copyright 2018 The go-ethereum Authors
-// This file is part of go-ethereum.
+// This file is part of the go-ethereum library.
 //
-// go-ethereum is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
+// The go-ethereum library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// go-ethereum is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU General Public License for more details.
+// GNU Lesser General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License
-// along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package rules
 
@@ -22,13 +22,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/dop251/goja"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/signer/core"
 	"github.com/ethereum/go-ethereum/signer/rules/deps"
 	"github.com/ethereum/go-ethereum/signer/storage"
-	"github.com/robertkrimen/otto"
 )
 
 var (
@@ -37,62 +36,81 @@ var (
 
 // consoleOutput is an override for the console.log and console.error methods to
 // stream the output into the configured output stream instead of stdout.
-func consoleOutput(call otto.FunctionCall) otto.Value {
+func consoleOutput(call goja.FunctionCall) goja.Value {
 	output := []string{"JS:> "}
-	for _, argument := range call.ArgumentList {
+	for _, argument := range call.Arguments {
 		output = append(output, fmt.Sprintf("%v", argument))
 	}
-	fmt.Fprintln(os.Stdout, strings.Join(output, " "))
-	return otto.Value{}
+	fmt.Fprintln(os.Stderr, strings.Join(output, " "))
+	return goja.Undefined()
 }
 
-// rulesetUi provides an implementation of SignerUI that evaluates a javascript
+// rulesetUI provides an implementation of UIClientAPI that evaluates a javascript
 // file for each defined UI-method
-type rulesetUi struct {
-	next        core.SignerUI // The next handler, for manual processing
-	storage     storage.Storage
-	credentials storage.Storage
-	jsRules     string // The rules to use
+type rulesetUI struct {
+	next    core.UIClientAPI // The next handler, for manual processing
+	storage storage.Storage
+	jsRules string // The rules to use
 }
 
-func NewRuleEvaluator(next core.SignerUI, jsbackend, credentialsBackend storage.Storage) (*rulesetUi, error) {
-	c := &rulesetUi{
-		next:        next,
-		storage:     jsbackend,
-		credentials: credentialsBackend,
-		jsRules:     "",
+func NewRuleEvaluator(next core.UIClientAPI, jsbackend storage.Storage) (*rulesetUI, error) {
+	c := &rulesetUI{
+		next:    next,
+		storage: jsbackend,
+		jsRules: "",
 	}
 
 	return c, nil
 }
+func (r *rulesetUI) RegisterUIServer(api *core.UIServerAPI) {
+	// TODO, make it possible to query from js
+}
 
-func (r *rulesetUi) Init(javascriptRules string) error {
+func (r *rulesetUI) Init(javascriptRules string) error {
 	r.jsRules = javascriptRules
 	return nil
 }
-func (r *rulesetUi) execute(jsfunc string, jsarg interface{}) (otto.Value, error) {
+func (r *rulesetUI) execute(jsfunc string, jsarg interface{}) (goja.Value, error) {
 
 	// Instantiate a fresh vm engine every time
-	vm := otto.New()
+	vm := goja.New()
+
 	// Set the native callbacks
-	consoleObj, _ := vm.Get("console")
-	consoleObj.Object().Set("log", consoleOutput)
-	consoleObj.Object().Set("error", consoleOutput)
-	vm.Set("storage", r.storage)
+	consoleObj := vm.NewObject()
+	consoleObj.Set("log", consoleOutput)
+	consoleObj.Set("error", consoleOutput)
+	vm.Set("console", consoleObj)
+
+	storageObj := vm.NewObject()
+	storageObj.Set("put", func(call goja.FunctionCall) goja.Value {
+		key, val := call.Argument(0).String(), call.Argument(1).String()
+		if val == "" {
+			r.storage.Del(key)
+		} else {
+			r.storage.Put(key, val)
+		}
+		return goja.Null()
+	})
+	storageObj.Set("get", func(call goja.FunctionCall) goja.Value {
+		goval, _ := r.storage.Get(call.Argument(0).String())
+		jsval := vm.ToValue(goval)
+		return jsval
+	})
+	vm.Set("storage", storageObj)
 
 	// Load bootstrap libraries
-	script, err := vm.Compile("bignumber.js", BigNumber_JS)
+	script, err := goja.Compile("bignumber.js", string(BigNumber_JS), true)
 	if err != nil {
 		log.Warn("Failed loading libraries", "err", err)
-		return otto.UndefinedValue(), err
+		return goja.Undefined(), err
 	}
-	vm.Run(script)
+	vm.RunProgram(script)
 
 	// Run the actual rule implementation
-	_, err = vm.Run(r.jsRules)
+	_, err = vm.RunString(r.jsRules)
 	if err != nil {
 		log.Warn("Execution failed", "err", err)
-		return otto.UndefinedValue(), err
+		return goja.Undefined(), err
 	}
 
 	// And the actual call
@@ -103,7 +121,7 @@ func (r *rulesetUi) execute(jsfunc string, jsarg interface{}) (otto.Value, error
 	jsonbytes, err := json.Marshal(jsarg)
 	if err != nil {
 		log.Warn("failed marshalling data", "data", jsarg)
-		return otto.UndefinedValue(), err
+		return goja.Undefined(), err
 	}
 	// Now, we call foobar(JSON.parse(<jsondata>)).
 	var call string
@@ -112,10 +130,10 @@ func (r *rulesetUi) execute(jsfunc string, jsarg interface{}) (otto.Value, error
 	} else {
 		call = fmt.Sprintf("%v()", jsfunc)
 	}
-	return vm.Run(call)
+	return vm.RunString(call)
 }
 
-func (r *rulesetUi) checkApproval(jsfunc string, jsarg []byte, err error) (bool, error) {
+func (r *rulesetUI) checkApproval(jsfunc string, jsarg []byte, err error) (bool, error) {
 	if err != nil {
 		return false, err
 	}
@@ -124,11 +142,7 @@ func (r *rulesetUi) checkApproval(jsfunc string, jsarg []byte, err error) (bool,
 		log.Info("error occurred during execution", "error", err)
 		return false, err
 	}
-	result, err := v.ToString()
-	if err != nil {
-		log.Info("error occurred during response unmarshalling", "error", err)
-		return false, err
-	}
+	result := v.ToString().String()
 	if result == "Approve" {
 		log.Info("Op approved")
 		return true, nil
@@ -136,10 +150,10 @@ func (r *rulesetUi) checkApproval(jsfunc string, jsarg []byte, err error) (bool,
 		log.Info("Op rejected")
 		return false, nil
 	}
-	return false, fmt.Errorf("Unknown response")
+	return false, fmt.Errorf("unknown response")
 }
 
-func (r *rulesetUi) ApproveTx(request *core.SignTxRequest) (core.SignTxResponse, error) {
+func (r *rulesetUI) ApproveTx(request *core.SignTxRequest) (core.SignTxResponse, error) {
 	jsonreq, err := json.Marshal(request)
 	approved, err := r.checkApproval("ApproveTx", jsonreq, err)
 	if err != nil {
@@ -150,19 +164,13 @@ func (r *rulesetUi) ApproveTx(request *core.SignTxRequest) (core.SignTxResponse,
 	if approved {
 		return core.SignTxResponse{
 				Transaction: request.Transaction,
-				Approved:    true,
-				Password:    r.lookupPassword(request.Transaction.From.Address()),
-			},
+				Approved:    true},
 			nil
 	}
 	return core.SignTxResponse{Approved: false}, err
 }
 
-func (r *rulesetUi) lookupPassword(address common.Address) string {
-	return r.credentials.Get(strings.ToLower(address.String()))
-}
-
-func (r *rulesetUi) ApproveSignData(request *core.SignDataRequest) (core.SignDataResponse, error) {
+func (r *rulesetUI) ApproveSignData(request *core.SignDataRequest) (core.SignDataResponse, error) {
 	jsonreq, err := json.Marshal(request)
 	approved, err := r.checkApproval("ApproveSignData", jsonreq, err)
 	if err != nil {
@@ -170,31 +178,17 @@ func (r *rulesetUi) ApproveSignData(request *core.SignDataRequest) (core.SignDat
 		return r.next.ApproveSignData(request)
 	}
 	if approved {
-		return core.SignDataResponse{Approved: true, Password: r.lookupPassword(request.Address.Address())}, nil
+		return core.SignDataResponse{Approved: true}, nil
 	}
-	return core.SignDataResponse{Approved: false, Password: ""}, err
+	return core.SignDataResponse{Approved: false}, err
 }
 
-func (r *rulesetUi) ApproveExport(request *core.ExportRequest) (core.ExportResponse, error) {
-	jsonreq, err := json.Marshal(request)
-	approved, err := r.checkApproval("ApproveExport", jsonreq, err)
-	if err != nil {
-		log.Info("Rule-based approval error, going to manual", "error", err)
-		return r.next.ApproveExport(request)
-	}
-	if approved {
-		return core.ExportResponse{Approved: true}, nil
-	}
-	return core.ExportResponse{Approved: false}, err
+// OnInputRequired not handled by rules
+func (r *rulesetUI) OnInputRequired(info core.UserInputRequest) (core.UserInputResponse, error) {
+	return r.next.OnInputRequired(info)
 }
 
-func (r *rulesetUi) ApproveImport(request *core.ImportRequest) (core.ImportResponse, error) {
-	// This cannot be handled by rules, requires setting a password
-	// dispatch to next
-	return r.next.ApproveImport(request)
-}
-
-func (r *rulesetUi) ApproveListing(request *core.ListRequest) (core.ListResponse, error) {
+func (r *rulesetUI) ApproveListing(request *core.ListRequest) (core.ListResponse, error) {
 	jsonreq, err := json.Marshal(request)
 	approved, err := r.checkApproval("ApproveListing", jsonreq, err)
 	if err != nil {
@@ -207,22 +201,23 @@ func (r *rulesetUi) ApproveListing(request *core.ListRequest) (core.ListResponse
 	return core.ListResponse{}, err
 }
 
-func (r *rulesetUi) ApproveNewAccount(request *core.NewAccountRequest) (core.NewAccountResponse, error) {
+func (r *rulesetUI) ApproveNewAccount(request *core.NewAccountRequest) (core.NewAccountResponse, error) {
 	// This cannot be handled by rules, requires setting a password
 	// dispatch to next
 	return r.next.ApproveNewAccount(request)
 }
 
-func (r *rulesetUi) ShowError(message string) {
+func (r *rulesetUI) ShowError(message string) {
 	log.Error(message)
 	r.next.ShowError(message)
 }
 
-func (r *rulesetUi) ShowInfo(message string) {
+func (r *rulesetUI) ShowInfo(message string) {
 	log.Info(message)
 	r.next.ShowInfo(message)
 }
-func (r *rulesetUi) OnSignerStartup(info core.StartupInfo) {
+
+func (r *rulesetUI) OnSignerStartup(info core.StartupInfo) {
 	jsonInfo, err := json.Marshal(info)
 	if err != nil {
 		log.Warn("failed marshalling data", "data", info)
@@ -235,7 +230,7 @@ func (r *rulesetUi) OnSignerStartup(info core.StartupInfo) {
 	}
 }
 
-func (r *rulesetUi) OnApprovedTx(tx ethapi.SignTransactionResult) {
+func (r *rulesetUI) OnApprovedTx(tx ethapi.SignTransactionResult) {
 	jsonTx, err := json.Marshal(tx)
 	if err != nil {
 		log.Warn("failed marshalling transaction", "tx", tx)
