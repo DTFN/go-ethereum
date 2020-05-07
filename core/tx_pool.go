@@ -285,7 +285,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	if !config.NoLocals && config.Journal != "" {
 		pool.journal = newTxJournal(config.Journal)
 
-		if err := pool.journal.load(pool.AddLocalsCheck); err != nil { //don't call addTx because PosTable has not init yet
+		if err := pool.journal.load(pool.AddLocalsInit); err != nil { //don't call addTx because PosTable has not init yet
 			log.Warn("Failed to load transaction journal", "err", err)
 		}
 		if err := pool.journal.rotate(pool.local()); err != nil {
@@ -988,7 +988,7 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 }
 
 // AddLocalCheck is called in NewTxPool
-func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
+func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	errs = make([]error, len(txs))
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
@@ -999,23 +999,7 @@ func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
 			errs[i] = fmt.Errorf("tx count %v excceeds cachedTxSize %v", i, cachedTxSize)
 			continue
 		}
-		// Try to inject the transaction and update any state
-		replace, err := pool.add(tx, true)
-		if err != nil {
-			errs[i] = err
-			continue
-		}
-		// If we added a new transaction, run promotion checks and return
-		if !replace {
-			var signer types.Signer = types.HomesteadSigner{}
-			if tx.Protected() {
-				signer = pool.signer
-			}
-			from, _ := types.Sender(signer, tx) // already validated
-			fmt.Printf("try promote account %X tx nonce %v \n", from, tx.Nonce())
-			pool.promoteExecutables([]common.Address{from})
-		}
-		errs[i] = nil
+		pool.cachedTxs <- TxCallback{tx, true, nil}
 	}
 	return
 }
