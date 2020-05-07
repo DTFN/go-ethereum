@@ -987,7 +987,7 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 	return pool.addTxs(txs, false)
 }
 
-// AddLocalCheck is called in NewTxPool
+// AddLocalsInit is called in NewTxPool
 func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	errs = make([]error, len(txs))
 	pool.mu.Lock()
