@@ -993,6 +993,7 @@ func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
+	fmt.Printf("TxPool replay journals begin \n")
 	for i, tx := range txs {
 		if i > cachedTxSize {
 			errs[i] = fmt.Errorf("tx count %v excceeds cachedTxSize %v", i, cachedTxSize)
@@ -1011,6 +1012,7 @@ func (pool *TxPool) AddLocalsCheck(txs []*types.Transaction) (errs []error) {
 				signer = pool.signer
 			}
 			from, _ := types.Sender(signer, tx) // already validated
+			fmt.Printf("try promote account %X tx nonce %v \n", from, tx.Nonce())
 			pool.promoteExecutables([]common.Address{from})
 		}
 		errs[i] = nil
@@ -1317,9 +1319,10 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 				pool.enqueueTx(tx.Hash(), tx)
 			}
 			// Update the account nonce if needed
-			if nonce := tx.Nonce(); pool.pendingState.GetNonce(addr) > nonce {
+			pendingNonce := pool.pendingState.GetNonce(addr)
+			if nonce := tx.Nonce(); pendingNonce > nonce {
 				pool.pendingState.SetNonce(addr, nonce)
-				fmt.Printf("TxPool: addr %X nonce decreases to %v \n", addr, nonce)
+				fmt.Printf("TxPool: addr %X nonce %v decreases to %v \n", addr, pendingNonce, nonce)
 			}
 			return
 		}
