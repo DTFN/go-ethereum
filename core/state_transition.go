@@ -282,6 +282,7 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 							}
 						} else {
 							ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
+							log.Info("st.gas", "st.gas", st.gas)
 						}
 					}
 				}
@@ -299,7 +300,7 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 		}
 	}
 	st.refundGas()
-	if txfilter.AppVersion >= 5 {	//force collected to bigguy. The block proposers can be awarded through off-chain
+	if txfilter.AppVersion >= 5 { //force collected to bigguy. The block proposers can be awarded through off-chain
 		st.state.AddBalance(txfilter.Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	} else {
 		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
@@ -331,5 +332,6 @@ func (st *StateTransition) refundGas() {
 
 // gasUsed returns the amount of gas used up by the state transition.
 func (st *StateTransition) gasUsed() uint64 {
+	log.Info("tx gasused", "st.initialGas", st.initialGas, "st.gas", st.gas)
 	return st.initialGas - st.gas
 }
