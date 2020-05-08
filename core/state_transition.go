@@ -284,9 +284,9 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 								st.state.AddBalance(msg.From(), msg.Value()) //mint the money for the bigguy
 							}
 						} else {
-							log.Info("st.gas","st.gas",st.gas)
+							log.Info("st.gas pre","st.gas",st.gas)
 							ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
-							log.Info("st.gas", "st.gas", st.gas)
+							log.Info("st.gas after", "st.gas", st.gas)
 						}
 					}
 				}
