@@ -201,6 +201,7 @@ func init() {
 		initCommand,
 		printGenesisConfigCommand,
 		setGenesisConfigCommand,
+		resetGenesisConfigCommand,
 		importCommand,
 		exportCommand,
 		importPreimagesCommand,

@@ -94,6 +94,18 @@ The printGenesisConfigCommand command displays stored genesis config.`,
 		Description: `
 The setGenesisConfig command is used to upgrade supported evm instruction set.`,
 	}
+	resetGenesisConfigCommand = cli.Command{
+		Action:    utils.MigrateFlags(resetGenesisConfig),
+		Name:      "resetconfig",
+		Usage:     "reset genesis config to not support Istanbul",
+		ArgsUsage: "",
+		Flags: []cli.Flag{
+			utils.DataDirFlag,
+		},
+		Category: "BLOCKCHAIN COMMANDS",
+		Description: `
+The resetGenesisConfig command is used to degrade evm instruction set.`,
+	}
 	importCommand = cli.Command{
 		Action:    utils.MigrateFlags(importChain),
 		Name:      "import",
@@ -325,6 +337,38 @@ func setGenesisConfig(ctx *cli.Context) error {
 	upgradeConfig.Clique = storedcfg.Clique //we do not use clique either
 	fmt.Printf("storedcfg %v \n updated to \n upgradeConfig %v \n", storedcfg, upgradeConfig)
 	rawdb.WriteChainConfig(db, stored, upgradeConfig)
+	return nil
+}
+
+func resetGenesisConfig(ctx *cli.Context) error {
+	// Open an initialise both full and light databases
+	stack := makeFullNode(ctx)
+	defer stack.Close()
+	nodeConfig := stack.Config()
+	nodeConfig.Name = "gelchain"
+	db, err := stack.OpenDatabase("chaindata", 0, 0, "")
+	if err != nil {
+		utils.Fatalf("Failed to open database: %v", err)
+	}
+	stored := rawdb.ReadCanonicalHash(db, 0)
+	if (stored == common.Hash{}) {
+		log.Error("No genesis block! No need to reset config!")
+		return fmt.Errorf("No genesis block! No need to reset config! ")
+	}
+	storedcfg := rawdb.ReadChainConfig(db, stored)
+	if storedcfg == nil {
+		log.Error("Found genesis block without chain config!")
+		return fmt.Errorf("Found genesis block without chain config! ")
+	}
+	storedcfg.ConstantinopleBlock = nil
+	storedcfg.IstanbulBlock = nil
+	storedcfg.PetersburgBlock = nil
+	storedcfg.MuirGlacierBlock = nil
+	storedcfg.EIP150Block = nil
+	storedcfg.DAOForkSupport = false
+
+	fmt.Printf("storedcfg reset to %v \n", storedcfg)
+	rawdb.WriteChainConfig(db, stored, storedcfg)
 	return nil
 }
 

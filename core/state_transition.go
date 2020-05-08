@@ -210,8 +210,6 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 
 	// Pay intrinsic gas
 	gas, err := IntrinsicGas(st.data, contractCreation, homestead)
-	log.Info("IntrinsicGas","gas",gas)
-	log.Info("st.data","length", len(st.data))
 
 	if err != nil {
 		return nil, 0, false, err
@@ -284,9 +282,7 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 								st.state.AddBalance(msg.From(), msg.Value()) //mint the money for the bigguy
 							}
 						} else {
-							log.Info("st.gas pre","st.gas",st.gas)
 							ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
-							log.Info("st.gas after", "st.gas", st.gas)
 						}
 					}
 				}
@@ -336,6 +332,5 @@ func (st *StateTransition) refundGas() {
 
 // gasUsed returns the amount of gas used up by the state transition.
 func (st *StateTransition) gasUsed() uint64 {
-	log.Info("tx gasused", "st.initialGas", st.initialGas, "st.gas", st.gas)
 	return st.initialGas - st.gas
 }
