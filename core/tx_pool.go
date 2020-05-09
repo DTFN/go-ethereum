@@ -997,9 +997,9 @@ func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	var i int
 	var tx *types.Transaction
 	for i, tx = range txs {
-		if i >= cachedTxSize>>1 {
-			errs[i] = fmt.Errorf("tx count %v excceeds half cachedTxSize %v", i, cachedTxSize)
-			fmt.Printf("tx count %v excceeds cachedTxSize %v", i, cachedTxSize)
+		if i > cachedTxSize>>1 {
+			errs[i] = fmt.Errorf("tx count %v excceeds half cachedTxSize %v", i, cachedTxSize>>1)
+			fmt.Printf("tx count %v excceeds half cachedTxSize %v", i, cachedTxSize>>1)
 			continue
 		}
 		pool.cachedTxs <- TxCallback{tx, true, nil}
