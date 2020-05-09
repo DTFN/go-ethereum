@@ -995,12 +995,14 @@ func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 
 	fmt.Printf("TxPool replay journals begin \n")
 	for i, tx := range txs {
-		if i > cachedTxSize {
+		if i >= cachedTxSize {
 			errs[i] = fmt.Errorf("tx count %v excceeds cachedTxSize %v", i, cachedTxSize)
+			fmt.Printf("tx count %v excceeds cachedTxSize %v", i, cachedTxSize)
 			continue
 		}
 		pool.cachedTxs <- TxCallback{tx, true, nil}
 	}
+	fmt.Printf("TxPool replay journals end \n")
 	return
 }
 
