@@ -994,7 +994,7 @@ func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	defer pool.mu.Unlock()
 
 	fmt.Printf("TxPool replay journals begin \n")
-	var i int
+	var i, handled int
 	var tx *types.Transaction
 	for i, tx = range txs {
 		if i > cachedTxSize>>1 {
@@ -1003,11 +1003,12 @@ func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 			continue
 		}
 		pool.cachedTxs <- TxCallback{tx, true, nil}
+		handled++
 	}
 	if i > 0 {
 		pool.hasCachedTxs = true
 	}
-	fmt.Printf("TxPool replay journals end \n")
+	fmt.Printf("TxPool replay journals end. total tx count %v handled %v discard %v \n", i, handled, i-handled)
 	return
 }
 
