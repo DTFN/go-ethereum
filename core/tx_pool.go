@@ -42,7 +42,7 @@ const (
 	// rmTxChanSize is the size of channel listening to RemovedTransactionEvent.
 	rmTxChanSize = 10
 
-	cachedTxSize = 10000
+	cachedTxSize = 50000
 )
 
 var (
@@ -994,13 +994,18 @@ func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	defer pool.mu.Unlock()
 
 	fmt.Printf("TxPool replay journals begin \n")
-	for i, tx := range txs {
-		if i >= cachedTxSize {
-			errs[i] = fmt.Errorf("tx count %v excceeds cachedTxSize %v", i, cachedTxSize)
+	var i int
+	var tx *types.Transaction
+	for i, tx = range txs {
+		if i >= cachedTxSize>>1 {
+			errs[i] = fmt.Errorf("tx count %v excceeds half cachedTxSize %v", i, cachedTxSize)
 			fmt.Printf("tx count %v excceeds cachedTxSize %v", i, cachedTxSize)
 			continue
 		}
 		pool.cachedTxs <- TxCallback{tx, true, nil}
+	}
+	if i > 0 {
+		pool.hasCachedTxs = true
 	}
 	fmt.Printf("TxPool replay journals end \n")
 	return
@@ -1046,9 +1051,10 @@ func (pool *TxPool) HandleCachedTxs() {
 	pool.mu.Lock()
 	close(pool.cachedTxs) //this func is called after app.Commit, blockArrive should be false, no routine puts tx into cachedTxs directly, so it is safe to close it
 
+	pool.cachedTxs <- TxCallback{nil, false, nil} //an indicator
 	for txCallback := range pool.cachedTxs {
-		if txCallback.tx == nil {
-			panic("txCallback.tx cannot be nil")
+		if txCallback.tx == nil { //receive the indicator
+			break
 		}
 		// Try to inject the transaction and update any state
 		replace, err := pool.add(txCallback.tx, txCallback.local)
@@ -1073,7 +1079,6 @@ func (pool *TxPool) HandleCachedTxs() {
 			txCallback.result <- err
 		}
 	}
-	pool.cachedTxs = make(chan TxCallback, cachedTxSize)
 	pool.hasCachedTxs = false
 	pool.mu.Unlock()
 }
