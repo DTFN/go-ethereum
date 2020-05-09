@@ -1049,8 +1049,6 @@ func (pool *TxPool) HandleCachedTxs() {
 		return
 	}
 	pool.mu.Lock()
-	close(pool.cachedTxs) //this func is called after app.Commit, blockArrive should be false, no routine puts tx into cachedTxs directly, so it is safe to close it
-
 	pool.cachedTxs <- TxCallback{nil, false, nil} //an indicator
 	for txCallback := range pool.cachedTxs {
 		if txCallback.tx == nil { //receive the indicator
