@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	"runtime"
 )
 
 const (
@@ -42,7 +43,7 @@ const (
 	// rmTxChanSize is the size of channel listening to RemovedTransactionEvent.
 	rmTxChanSize = 10
 
-	cachedTxSize = 50000
+	journalTxSize = 50000
 )
 
 var (
@@ -234,12 +235,10 @@ type TxPool struct {
 	priced  *txPricedList                      // All transactions sorted by price
 
 	blockArrive       bool //true when loop() wants to get lock
-	appConsumer       bool
 	pendingTxPreEvent map[common.Hash]*TxPreEvent
 	relayTxInfo       map[common.Hash]*RelayInfo
 	flowLimit         bool
-	hasCachedTxs      bool
-	cachedTxs         chan TxCallback
+	journalTxs        chan TxCallback
 	mempoolTxsLen     int
 
 	wg sync.WaitGroup // for shutdown sync
@@ -269,13 +268,11 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		beats:             make(map[common.Address]time.Time),
 		all:               make(map[common.Hash]*types.Transaction),
 		chainHeadCh:       make(chan ChainHeadEvent, chainHeadChanSize),
-		cachedTxs:         make(chan TxCallback, cachedTxSize),
+		journalTxs:        make(chan TxCallback, journalTxSize),
 		pendingTxPreEvent: make(map[common.Hash]*TxPreEvent),
 		relayTxInfo:       make(map[common.Hash]*RelayInfo),
 		gasPrice:          new(big.Int).SetUint64(config.PriceLimit),
 		flowLimit:         false,
-		appConsumer:       false,
-		hasCachedTxs:      false,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
@@ -997,16 +994,16 @@ func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	var i, handled int
 	var tx *types.Transaction
 	for i, tx = range txs {
-		if i > cachedTxSize>>1 {
-			errs[i] = fmt.Errorf("tx count %v excceeds half cachedTxSize %v", i, cachedTxSize>>1)
-			fmt.Printf("tx count %v excceeds half cachedTxSize %v", i, cachedTxSize>>1)
+		if i > journalTxSize>>1 {
+			errs[i] = fmt.Errorf("tx count %v excceeds half journalTxSize %v", i, journalTxSize>>1)
+			fmt.Printf("tx count %v excceeds half journalTxSize %v", i, journalTxSize>>1)
 			continue
 		}
-		pool.cachedTxs <- TxCallback{tx, true, nil}
+		pool.journalTxs <- TxCallback{tx, true, nil}
 		handled++
 	}
 	if i > 0 {
-		pool.hasCachedTxs = true
+		pool.mempoolTxsLen = i //though this is not mempool txs, this can be used to limit tx pressure on start
 	}
 	fmt.Printf("TxPool replay journals end. total tx count %v handled %v discard %v \n", i, handled, i-handled)
 	return
@@ -1041,19 +1038,12 @@ func (pool *TxPool) flowLimitHandle() {
 	}
 }
 
-func (pool *TxPool) BeginConsume() {
-	pool.appConsumer = true
-}
-
-func (pool *TxPool) HandleCachedTxs() {
-	if !pool.appConsumer { //in replay, tendermint not fully started yet
-		return
-	}
+func (pool *TxPool) HandleJournalTxs() {
 	pool.mu.Lock()
-	pool.cachedTxs <- TxCallback{nil, false, nil} //an indicator
-	for txCallback := range pool.cachedTxs {
-		if txCallback.tx == nil { //receive the indicator
-			break
+	close(pool.journalTxs)
+	for txCallback := range pool.journalTxs {
+		if txCallback.tx == nil {
+			panic("journalTxs contains nil tx!")
 		}
 		// Try to inject the transaction and update any state
 		replace, err := pool.add(txCallback.tx, txCallback.local)
@@ -1071,14 +1061,17 @@ func (pool *TxPool) HandleCachedTxs() {
 				signer = pool.signer
 			}
 			from, _ := types.Sender(signer, txCallback.tx) // already validated
+			fmt.Printf("handle jounal tx from %X nonce %v ",from,txCallback.tx.Nonce())
 			pool.promoteExecutables([]common.Address{from})
 			delete(pool.pendingTxPreEvent, txCallback.tx.Hash())
 		}
 		if txPreEvent.Tx == nil { //has been put into pending
 			txCallback.result <- err
+			fmt.Print("\n")
+		}else{
+			fmt.Printf("promote \n")
 		}
 	}
-	pool.hasCachedTxs = false
 	pool.mu.Unlock()
 }
 
@@ -1087,23 +1080,10 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if pool.flowLimit {
 		pool.flowLimitHandle()
 	}
-	if pool.blockArrive {
-		callback := make(chan error, 1)
-		pool.cachedTxs <- TxCallback{tx, local, callback}
-		pool.hasCachedTxs = true
-		err := <-callback
-		close(callback)
-		return err
+	for pool.blockArrive {
+		runtime.Gosched()
 	}
 	pool.mu.Lock()
-	if pool.hasCachedTxs {
-		callback := make(chan error, 1)
-		pool.cachedTxs <- TxCallback{tx, local, callback}
-		pool.mu.Unlock()
-		err := <-callback
-		close(callback)
-		return err
-	}
 	// Try to inject the transaction and update any state
 	replace, err := pool.add(tx, local)
 	if err != nil {
@@ -1137,37 +1117,10 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	if pool.flowLimit {
 		pool.flowLimitHandle()
 	}
-	if pool.blockArrive {
-		errs := make([]error, len(txs))
-		callbacks := make([]chan error, len(txs))
-		for i, tx := range txs {
-			callback := make(chan error, 1)
-			pool.cachedTxs <- TxCallback{tx, local, callback}
-			callbacks[i] = callback
-		}
-		pool.hasCachedTxs = true
-		for i, callback := range callbacks {
-			errs[i] = <-callback
-			close(callback)
-		}
-		return errs
+	for pool.blockArrive {
+		runtime.Gosched()
 	}
 	pool.mu.Lock()
-	if pool.hasCachedTxs {
-		errs := make([]error, len(txs))
-		callbacks := make([]chan error, 0)
-		for i, tx := range txs {
-			callback := make(chan error, 1)
-			pool.cachedTxs <- TxCallback{tx, local, callback}
-			callbacks[i] = callback
-		}
-		pool.mu.Unlock()
-		for i, callback := range callbacks {
-			errs[i] = <-callback
-			close(callback)
-		}
-		return errs
-	}
 	errs := pool.addTxsLocked(txs, local)
 	results := make([]chan error, len(txs))
 	for i, tx := range txs {
