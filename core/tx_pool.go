@@ -235,6 +235,7 @@ type TxPool struct {
 	priced  *txPricedList                      // All transactions sorted by price
 
 	blockArrive       bool //true when loop() wants to get lock
+	appConsume        bool
 	pendingTxPreEvent map[common.Hash]*TxPreEvent
 	relayTxInfo       map[common.Hash]*RelayInfo
 	flowLimit         bool
@@ -273,6 +274,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		relayTxInfo:       make(map[common.Hash]*RelayInfo),
 		gasPrice:          new(big.Int).SetUint64(config.PriceLimit),
 		flowLimit:         false,
+		appConsume:        false,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	pool.priced = newTxPricedList(&pool.all)
@@ -1061,17 +1063,18 @@ func (pool *TxPool) HandleJournalTxs() {
 				signer = pool.signer
 			}
 			from, _ := types.Sender(signer, txCallback.tx) // already validated
-			fmt.Printf("handle jounal tx from %X nonce %v ",from,txCallback.tx.Nonce())
+			fmt.Printf("handle jounal tx from %X nonce %v ", from, txCallback.tx.Nonce())
 			pool.promoteExecutables([]common.Address{from})
 			delete(pool.pendingTxPreEvent, txCallback.tx.Hash())
 		}
 		if txPreEvent.Tx == nil { //has been put into pending
 			txCallback.result <- err
 			fmt.Print("\n")
-		}else{
+		} else {
 			fmt.Printf("promote \n")
 		}
 	}
+	pool.appConsume = true
 	pool.mu.Unlock()
 }
 
@@ -1080,7 +1083,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	if pool.flowLimit {
 		pool.flowLimitHandle()
 	}
-	for pool.blockArrive {
+	for pool.blockArrive || !pool.appConsume {
 		runtime.Gosched()
 	}
 	pool.mu.Lock()
@@ -1117,7 +1120,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	if pool.flowLimit {
 		pool.flowLimitHandle()
 	}
-	for pool.blockArrive {
+	for pool.blockArrive || !pool.appConsume {
 		runtime.Gosched()
 	}
 	pool.mu.Lock()
