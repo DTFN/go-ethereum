@@ -196,12 +196,6 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 	return conf
 }
 
-type TxCallback struct {
-	tx     *types.Transaction
-	local  bool
-	result chan error
-}
-
 // TxPool contains all currently known transactions. Transactions
 // enter the pool when they are received from the network or submitted
 // locally. They exit the pool when they are included in the blockchain.
@@ -239,7 +233,7 @@ type TxPool struct {
 	pendingTxPreEvent map[common.Hash]*TxPreEvent
 	relayTxInfo       map[common.Hash]*RelayInfo
 	flowLimit         bool
-	journalTxs        chan TxCallback
+	journalTxs        chan *types.Transaction
 	mempoolTxsLen     int
 
 	wg sync.WaitGroup // for shutdown sync
@@ -269,7 +263,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		beats:             make(map[common.Address]time.Time),
 		all:               make(map[common.Hash]*types.Transaction),
 		chainHeadCh:       make(chan ChainHeadEvent, chainHeadChanSize),
-		journalTxs:        make(chan TxCallback, journalTxSize),
+		journalTxs:        make(chan *types.Transaction, journalTxSize),
 		pendingTxPreEvent: make(map[common.Hash]*TxPreEvent),
 		relayTxInfo:       make(map[common.Hash]*RelayInfo),
 		gasPrice:          new(big.Int).SetUint64(config.PriceLimit),
@@ -990,24 +984,26 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	errs = make([]error, len(txs))
 	pool.mu.Lock()
-	defer pool.mu.Unlock()
 
+	handled := 0
+	discard := 0
+	total := len(txs)
 	fmt.Printf("TxPool replay journals begin \n")
-	var i, handled int
-	var tx *types.Transaction
-	for i, tx = range txs {
+	for i, tx := range txs {
 		if i > journalTxSize>>1 {
 			errs[i] = fmt.Errorf("tx count %v excceeds half journalTxSize %v", i, journalTxSize>>1)
 			fmt.Printf("tx count %v excceeds half journalTxSize %v", i, journalTxSize>>1)
+			discard++
 			continue
 		}
-		pool.journalTxs <- TxCallback{tx, true, nil}
+		pool.journalTxs <- tx
 		handled++
 	}
-	if i > 0 {
-		pool.mempoolTxsLen = i //though this is not mempool txs, this can be used to limit tx pressure on start
+	if handled > 0 {
+		pool.mempoolTxsLen = handled //though this is not mempool txs, this can be used to limit tx pressure on start
 	}
-	fmt.Printf("TxPool replay journals end. total tx count %v handled %v discard %v \n", i, handled, i-handled)
+	pool.mu.Unlock()
+	fmt.Printf("TxPool replay journals end. total tx count %v handled %v discard %v \n", total, handled, discard)
 	return
 }
 
@@ -1041,34 +1037,30 @@ func (pool *TxPool) flowLimitHandle() {
 }
 
 func (pool *TxPool) HandleJournalTxs() {
+	fmt.Println("HandleJournalTxs begin")
 	pool.mu.Lock()
 	close(pool.journalTxs)
-	for txCallback := range pool.journalTxs {
-		if txCallback.tx == nil {
+	for tx := range pool.journalTxs {
+		if tx == nil {
 			panic("journalTxs contains nil tx!")
 		}
 		// Try to inject the transaction and update any state
-		replace, err := pool.add(txCallback.tx, txCallback.local)
+		replace, err := pool.add(tx, true)
 		if err != nil {
-			txCallback.result <- err
+			fmt.Printf("HandleJournalTxs fail to add tx %v , err %v \n", tx, err)
 			continue
 		}
 		txPreEvent := &TxPreEvent{}
 		// If we added a new transaction, run promotion checks and return
 		if !replace {
-			txPreEvent.Result = txCallback.result
-			pool.pendingTxPreEvent[txCallback.tx.Hash()] = txPreEvent
+			pool.pendingTxPreEvent[tx.Hash()] = txPreEvent
 			var signer types.Signer = types.HomesteadSigner{}
-			if txCallback.tx.Protected() {
-				signer = pool.signer
-			}
-			from, _ := types.Sender(signer, txCallback.tx) // already validated
-			fmt.Printf("handle jounal tx from %X nonce %v ", from, txCallback.tx.Nonce())
+			from, _ := types.Sender(signer, tx) // already validated
+			fmt.Printf("handle jounal tx from %X nonce %v ", from, tx.Nonce())
 			pool.promoteExecutables([]common.Address{from})
-			delete(pool.pendingTxPreEvent, txCallback.tx.Hash())
+			delete(pool.pendingTxPreEvent, tx.Hash())
 		}
 		if txPreEvent.Tx == nil { //has been put into pending
-			txCallback.result <- err
 			fmt.Print("\n")
 		} else {
 			fmt.Printf("promote \n")
@@ -1076,6 +1068,7 @@ func (pool *TxPool) HandleJournalTxs() {
 	}
 	pool.appConsume = true
 	pool.mu.Unlock()
+	fmt.Println("HandleJournalTxs end")
 }
 
 // addTx enqueues a single transaction into the pool if it is valid.
@@ -1127,7 +1120,6 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
 	errs := pool.addTxsLocked(txs, local)
 	results := make([]chan error, len(txs))
 	for i, tx := range txs {
-
 		if errs[i] == nil {
 			if txPreEvent, ok := pool.pendingTxPreEvent[tx.Hash()]; ok {
 				if txPreEvent.Result != nil {
