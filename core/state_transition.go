@@ -343,5 +343,6 @@ func (st *StateTransition) refundGas() {
 
 // gasUsed returns the amount of gas used up by the state transition.
 func (st *StateTransition) gasUsed() uint64 {
+	log.Info("tx gasused", "st.initialGas", st.initialGas, "st.gas", st.gas)
 	return st.initialGas - st.gas
 }
