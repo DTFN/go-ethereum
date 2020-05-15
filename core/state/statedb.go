@@ -659,12 +659,11 @@ func (s *StateDB) GetRefund() uint64 {
 	return s.refund
 }
 
-// Finalise finalises the state by removing the s destructed objects and clears
-// the journal as well as the refunds. Finalise, however, will not push any updates
-// into the tries just yet. Only IntermediateRoot or Commit will do that.
+// Finalise finalises the state by removing the self destructed objects
+// and clears the journal as well as the refunds.
 func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	for addr := range s.journal.dirties {
-		obj, exist := s.stateObjects[addr]
+		stateObject, exist := s.stateObjects[addr]
 		if !exist {
 			// ripeMD is 'touched' at block 1714175, in tx 0x1237f737031e40bcde4a8b7e717b2d15e3ecadfe49bb1bbc71ee9deb09c6fcf2
 			// That tx goes out of gas, and although the notion of 'touched' does not exist there, the
@@ -674,12 +673,13 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			// Thus, we can safely ignore it here
 			continue
 		}
-		if obj.suicided || (deleteEmptyObjects && obj.empty()) {
-			obj.deleted = true
+
+		if stateObject.suicided || (deleteEmptyObjects && stateObject.empty()) {
+			s.deleteStateObject(stateObject)
 		} else {
-			obj.finalise()
+			stateObject.updateRoot(s.db)
+			s.updateStateObject(stateObject)
 		}
-		s.stateObjectsPending[addr] = struct{}{}
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
 	// Invalidate journal because reverting across transactions is not allowed.
@@ -690,25 +690,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 // It is called in between transactions to get the root hash that
 // goes into transaction receipts.
 func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
-	// Finalise all the dirty storage states and write them into the tries
 	s.Finalise(deleteEmptyObjects)
-
-	for addr := range s.stateObjectsPending {
-		obj := s.stateObjects[addr]
-		if obj.deleted {
-			s.deleteStateObject(obj)
-		} else {
-			obj.updateRoot(s.db)
-			s.updateStateObject(obj)
-		}
-	}
-	if len(s.stateObjectsPending) > 0 {
-		s.stateObjectsPending = make(map[common.Address]struct{})
-	}
-	// Track the amount of time wasted on hashing the account trie
-	if metrics.EnabledExpensive {
-		defer func(start time.Time) { s.AccountHashes += time.Since(start) }(time.Now())
-	}
 	return s.trie.Hash()
 }
 
@@ -729,35 +711,38 @@ func (s *StateDB) clearJournalAndRefund() {
 }
 
 // Commit writes the state to the underlying in-memory trie database.
-func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
-	// Finalize any pending changes and merge everything into the tries
-	s.IntermediateRoot(deleteEmptyObjects)
+func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) {
+	defer s.clearJournalAndRefund()
 
-	// Commit objects to the trie, measuring the elapsed time
-	for addr := range s.stateObjectsDirty {
-		if obj := s.stateObjects[addr]; !obj.deleted {
+	for addr := range s.journal.dirties {
+		s.stateObjectsDirty[addr] = struct{}{}
+	}
+	// Commit objects to the trie.
+	for addr, stateObject := range s.stateObjects {
+		_, isDirty := s.stateObjectsDirty[addr]
+		switch {
+		case stateObject.suicided || (isDirty && deleteEmptyObjects && stateObject.empty()):
+			// If the object has been removed, don't bother syncing it
+			// and just mark it for deletion in the trie.
+			s.deleteStateObject(stateObject)
+		case isDirty:
 			// Write any contract code associated with the state object
-			if obj.code != nil && obj.dirtyCode {
-				s.db.TrieDB().InsertBlob(common.BytesToHash(obj.CodeHash()), obj.code)
-				obj.dirtyCode = false
+			if stateObject.code != nil && stateObject.dirtyCode {
+				s.db.TrieDB().InsertBlob(common.BytesToHash(stateObject.CodeHash()), stateObject.code)
+				stateObject.dirtyCode = false
 			}
-			// Write any storage changes in the state object to its storage trie
-			if err := obj.CommitTrie(s.db); err != nil {
+			// Write any storage changes in the state object to its storage trie.
+			if err := stateObject.CommitTrie(s.db); err != nil {
 				return common.Hash{}, err
 			}
+			// Update the object in the main account trie.
+			s.updateStateObject(stateObject)
 		}
+		delete(s.stateObjectsDirty, addr)
 	}
-	if len(s.stateObjectsDirty) > 0 {
-		s.stateObjectsDirty = make(map[common.Address]struct{})
-	}
-	// Write the account trie changes, measuing the amount of wasted time
-	if metrics.EnabledExpensive {
-		defer func(start time.Time) { s.AccountCommits += time.Since(start) }(time.Now())
-	}
-	// The onleaf func is called _serially_, so we can reuse the same account
-	// for unmarshalling every time.
-	var account Account
-	return s.trie.Commit(func(leaf []byte, parent common.Hash) error {
+	// Write trie changes.
+	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
+		var account Account
 		if err := rlp.DecodeBytes(leaf, &account); err != nil {
 			return nil
 		}
@@ -770,6 +755,8 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		}
 		return nil
 	})
+	//log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
+	return root, err
 }
 
 func (s *StateDB) InitPosTable() (*txfilter.PosTable) {
