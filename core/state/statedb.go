@@ -720,9 +720,14 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	fmt.Printf("s.trie.Hash: %X\n", s.trie.Hash())
 	defer s.clearJournalAndRefund()
 
+	fmt.Printf("s.journal.dirties:%v before journal dirties, %v",len(s.journal.dirties),s.journal.dirties)
+	fmt.Printf("s.journal.entries:%v before journal dirties",len(s.journal.entries))
+	fmt.Printf(",st.state.TrieHash in go-ethereum before journal dirties: %X\n",s.TrieHash())
 	for addr := range s.journal.dirties {
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
+	fmt.Printf("s.stateObjectDirty after journal dirties:%v,%v",len(s.stateObjectsDirty),s.stateObjectsDirty)
+	fmt.Printf(",st.state.TrieHash in go-ethereum after journal dirties: %X\n",s.TrieHash())
 	// Commit objects to the trie.
 	for addr, stateObject := range s.stateObjects {
 		_, isDirty := s.stateObjectsDirty[addr]
@@ -746,6 +751,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		}
 		delete(s.stateObjectsDirty, addr)
 	}
+	fmt.Printf(",st.state.TrieHash in go-ethereum after stateObjectsDirty: %X\n",s.TrieHash())
 	// Write trie changes.
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
 		var account Account
