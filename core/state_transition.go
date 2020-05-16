@@ -306,6 +306,7 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	}
 
+	st.state.TrieHash()
 	return ret, st.gasUsed(), vmerr != nil, err
 }
 

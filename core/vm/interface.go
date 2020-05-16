@@ -59,6 +59,7 @@ type StateDB interface {
 
 	RevertToSnapshot(int)
 	Snapshot() int
+	TrieHash() common.Hash
 
 	AddLog(*types.Log)
 	AddPreimage(common.Hash, []byte)
