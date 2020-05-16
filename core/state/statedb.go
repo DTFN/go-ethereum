@@ -712,6 +712,7 @@ func (s *StateDB) clearJournalAndRefund() {
 
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) {
+	fmt.Printf("s.trie.Hash: %X\n", s.trie.Hash())
 	defer s.clearJournalAndRefund()
 
 	for addr := range s.journal.dirties {
@@ -741,7 +742,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		delete(s.stateObjectsDirty, addr)
 	}
 	// Write trie changes.
-	fmt.Printf("s.trie.Hash: %X\n", s.trie.Hash())
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
 		var account Account
 		if err := rlp.DecodeBytes(leaf, &account); err != nil {
