@@ -726,6 +726,11 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	for addr := range s.journal.dirties {
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
+	for key,_ := range s.stateObjectsDirty{
+		fmt.Printf("key,%X\n",key)
+		fmt.Printf(key.String())
+		fmt.Println("try to print key")
+	}
 	fmt.Printf("s.stateObjectDirty after journal dirties:%v,%v",len(s.stateObjectsDirty),s.stateObjectsDirty)
 	fmt.Printf(",st.state.TrieHash in go-ethereum after journal dirties: %X\n",s.TrieHash())
 	// Commit objects to the trie.
