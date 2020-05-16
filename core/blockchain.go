@@ -1367,6 +1367,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		fmt.Println(string(dumpBytes))
 	}
 
+	fmt.Printf("s.block height: %v\n", block.Header().Number.Int64())
 	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
 	if err != nil {
 		return NonStatTy, err
