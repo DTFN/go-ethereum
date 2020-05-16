@@ -741,8 +741,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		delete(s.stateObjectsDirty, addr)
 	}
 	// Write trie changes.
-	dumpBytes := s.Dump(false, false, true)
-	fmt.Println(string(dumpBytes))
 	fmt.Printf("s.trie.Hash: %X\n", s.trie.Hash())
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
 		var account Account
