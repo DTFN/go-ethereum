@@ -24,16 +24,16 @@ import (
 	"sort"
 	"time"
 
+	"bytes"
+	"encoding/json"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/txfilter"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/core/txfilter"
-	"encoding/json"
-	"bytes"
 )
 
 type revision struct {
@@ -695,7 +695,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 }
 
 //try to print try hash
-func (s *StateDB) TrieHash() common.Hash{
+func (s *StateDB) TrieHash() common.Hash {
 	return s.trie.Hash()
 }
 
@@ -720,19 +720,26 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	fmt.Printf("s.trie.Hash: %X\n", s.trie.Hash())
 	defer s.clearJournalAndRefund()
 
-	fmt.Printf("s.journal.dirties:%v before journal dirties, %v",len(s.journal.dirties),s.journal.dirties)
-	fmt.Printf("s.journal.entries:%v before journal dirties",len(s.journal.entries))
-	fmt.Printf(",st.state.TrieHash in go-ethereum before journal dirties: %X\n",s.TrieHash())
+	fmt.Printf("s.journal.dirties:%v before journal dirties, %v", len(s.journal.dirties), s.journal.dirties)
+	fmt.Printf("s.journal.entries:%v before journal dirties", len(s.journal.entries))
+	fmt.Printf(",st.state.TrieHash in go-ethereum before journal dirties: %X\n", s.TrieHash())
 	for addr := range s.journal.dirties {
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
-	for key,_ := range s.stateObjectsDirty{
-		fmt.Printf("key,%X\n",key)
+	for key, _ := range s.stateObjectsDirty {
+		fmt.Printf("key,%X\n", key)
 		fmt.Printf(key.String())
 		fmt.Println("try to print key")
 	}
-	fmt.Printf("s.stateObjectDirty after journal dirties:%v,%v",len(s.stateObjectsDirty),s.stateObjectsDirty)
-	fmt.Printf(",st.state.TrieHash in go-ethereum after journal dirties: %X\n",s.TrieHash())
+	fmt.Printf("s.stateObjectDirty after journal dirties:%v,%v", len(s.stateObjectsDirty), s.stateObjectsDirty)
+	fmt.Printf(",st.state.TrieHash in go-ethereum after journal dirties: %X\n", s.TrieHash())
+
+	fmt.Println(bytes.Equal(s.TrieHash().Bytes(), common.HexToAddress("0xBE1BE537FC987BD97230F123A16FE71DE388A1927FAA9DDA1EB9CB455968010A").Bytes()))
+	if bytes.Equal(s.TrieHash().Bytes(), common.HexToAddress("0xBE1BE537FC987BD97230F123A16FE71DE388A1927FAA9DDA1EB9CB455968010A").Bytes()) {
+		fmt.Println(bytes.Equal(s.TrieHash().Bytes(), common.HexToAddress("0xBE1BE537FC987BD97230F123A16FE71DE388A1927FAA9DDA1EB9CB455968010A").Bytes()))
+		delete(s.stateObjectsDirty, common.HexToAddress("0x0000000000000000000000000000000000000001"))
+	}
+
 	// Commit objects to the trie.
 	for addr, stateObject := range s.stateObjects {
 		_, isDirty := s.stateObjectsDirty[addr]
@@ -756,7 +763,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		}
 		delete(s.stateObjectsDirty, addr)
 	}
-	fmt.Printf(",st.state.TrieHash in go-ethereum after stateObjectsDirty: %X\n",s.TrieHash())
+	fmt.Printf(",st.state.TrieHash in go-ethereum after stateObjectsDirty: %X\n", s.TrieHash())
 	// Write trie changes.
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
 		var account Account
@@ -776,7 +783,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	return root, err
 }
 
-func (s *StateDB) InitPosTable() (*txfilter.PosTable) {
+func (s *StateDB) InitPosTable() *txfilter.PosTable {
 	nextEpochDataAddress := txfilter.SendToUnlock
 	log.Info("Read NextEpochValData")
 	nextBytes := s.GetCode(nextEpochDataAddress)
@@ -794,7 +801,7 @@ func (s *StateDB) InitPosTable() (*txfilter.PosTable) {
 	return txfilter.NextPosTable
 }
 
-func (s *StateDB) InitAuthTable() (*txfilter.AuthTable) {
+func (s *StateDB) InitAuthTable() *txfilter.AuthTable {
 	permitTableDataAddress := txfilter.SendToAuth
 	log.Info("Read PermitTable")
 	nextBytes := s.GetCode(permitTableDataAddress)
