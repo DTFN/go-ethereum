@@ -1362,11 +1362,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 	// Commit all cached state changes into underlying memory database.
 
-	if block.Header().Number.Int64() == 45852 || block.Header().Number.Int64() == 51234 {
-		dumpBytes := state.Dump(false, false, true)
-		fmt.Println(string(dumpBytes))
-	}
-	fmt.Printf("s.block height: %v\n", block.Header().Number.Int64())
+	//if block.Header().Number.Int64() == 45852 || block.Header().Number.Int64() == 51234 {
+	//	dumpBytes := state.Dump(false, false, true)
+	//	fmt.Println(string(dumpBytes))
+	//}
+	//fmt.Printf("s.block height: %v\n", block.Header().Number.Int64())
 
 	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
 	if err != nil {
