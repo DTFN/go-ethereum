@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strings"
 	"time"
 
 	"bytes"
@@ -733,10 +734,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	}
 	fmt.Printf("s.stateObjectDirty after journal dirties:%v,%v", len(s.stateObjectsDirty), s.stateObjectsDirty)
 	fmt.Printf(",st.state.TrieHash in go-ethereum after journal dirties: %X\n", s.TrieHash())
-	fmt.Println(s.TrieHash().String())
-	fmt.Println(bytes.Equal(s.TrieHash().Bytes(), common.HexToAddress("BE1BE537FC987BD97230F123A16FE71DE388A1927FAA9DDA1EB9CB455968010A").Bytes()))
-	if bytes.Equal(s.TrieHash().Bytes(), common.HexToAddress("BE1BE537FC987BD97230F123A16FE71DE388A1927FAA9DDA1EB9CB455968010A").Bytes()) {
-		fmt.Println(bytes.Equal(s.TrieHash().Bytes(), common.HexToAddress("0xBE1BE537FC987BD97230F123A16FE71DE388A1927FAA9DDA1EB9CB455968010A").Bytes()))
+	if strings.EqualFold(s.TrieHash().String(),"0xbe1be537fc987bd97230f123a16fe71de388a1927faa9dda1eb9cb455968010a"){
 		delete(s.stateObjectsDirty, common.HexToAddress("0x0000000000000000000000000000000000000001"))
 	}
 
