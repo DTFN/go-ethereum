@@ -18,6 +18,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 
@@ -306,7 +307,7 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	}
 	
-	fmt.Printf("st.state.TrieHash behind tx: %X\n",st.state.TrieHash())
+	fmt.Printf("block.Height: %v,st.state.TrieHash in state transition: %X\n",st.evm.BlockNumber.Int64(),st.state.TrieHash())
 	return ret, st.gasUsed(), vmerr != nil, err
 }
 
