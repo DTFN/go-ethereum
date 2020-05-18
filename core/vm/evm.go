@@ -325,7 +325,7 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 		to       = AccountRef(caller.Address())
 	)
 	if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
-		fmt.Printf("============DelegateCall caller %X value %v to 0000000001!!!!!!!! \n", caller, value)
+		fmt.Printf("============DelegateCall caller %X to 0000000001!!!!!!!! \n", caller)
 	}
 	// Initialise a new contract and make initialise the delegate values
 	contract := NewContract(caller, to, nil, gas).AsDelegate()
@@ -360,7 +360,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 		snapshot = evm.StateDB.Snapshot()
 	)
 	if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
-		fmt.Printf("============StaticCall caller %X value %v to 0000000001!!!!!!!! \n", caller, value)
+		fmt.Printf("============StaticCall caller %X  to 0000000001!!!!!!!! \n", caller)
 	}
 	// Initialise a new contract and set the code that is to be used by the EVM.
 	// The contract is a scoped environment for this execution context only.
