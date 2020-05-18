@@ -205,6 +205,9 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		to       = AccountRef(addr)
 		snapshot = evm.StateDB.Snapshot()
 	)
+	if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
+		fmt.Printf("evm stateDB exist 000000001? %v\n",evm.StateDB.Exist(addr))
+	}
 	if !evm.StateDB.Exist(addr) {
 		precompiles := PrecompiledContractsHomestead
 		if evm.chainRules.IsByzantium {
