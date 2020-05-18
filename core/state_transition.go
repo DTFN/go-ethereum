@@ -142,6 +142,11 @@ func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) ([]byte, uint64, bool, 
 func ApplyMessageWithInfo(evm *vm.EVM, msg Message, gp *GasPool, txInfo *types.TxInfo) ([]byte, uint64, bool, error) {
 	st := NewStateTransition(evm, msg, gp)
 	st.txInfo = txInfo
+	if msg.To() == nil {
+		fmt.Printf("nonce:%v\n", msg.Nonce())
+	} else {
+		fmt.Printf("nonce:%v, to:%X\n", msg.Nonce(), *msg.To())
+	}
 	return st.transitionDb(false)
 }
 
