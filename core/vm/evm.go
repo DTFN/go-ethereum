@@ -221,7 +221,13 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			}
 			return nil, gas, nil
 		}
+		if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
+			fmt.Printf("============CALL, caller %X value %v to 0000000001!!!!!!!! Create!!!!!!! \n", caller, value)
+		}
 		evm.StateDB.CreateAccount(addr)
+	}
+	if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
+		fmt.Printf("============CALL, caller %X value %v to 0000000001!!!!!!!! \n", caller, value)
 	}
 	evm.Transfer(evm.StateDB, caller.Address(), to.Address(), value)
 	// Initialise a new contract and set the code that is to be used by the EVM.
@@ -246,7 +252,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
 	if err != nil {
-		fmt.Printf("-----err!=nil %v in Call! revert!\n",err)
+		fmt.Printf("-----err!=nil %v in Call! revert!\n", err)
 		evm.StateDB.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
@@ -271,6 +277,10 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
+
+	if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
+		fmt.Printf("============CallCode caller %X value %v to 0000000001!!!!!!!! \n", caller, value)
+	}
 	// Fail if we're trying to transfer more than the available balance
 	if !evm.CanTransfer(evm.StateDB, caller.Address(), value) {
 		return nil, gas, ErrInsufficientBalance
@@ -287,7 +297,7 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 
 	ret, err = run(evm, contract, input, false)
 	if err != nil {
-		fmt.Printf("-----err!=nil %v in CallCode! revert!\n",err)
+		fmt.Printf("-----err!=nil %v in CallCode! revert!\n", err)
 		evm.StateDB.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
@@ -314,14 +324,16 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 		snapshot = evm.StateDB.Snapshot()
 		to       = AccountRef(caller.Address())
 	)
-
+	if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
+		fmt.Printf("============DelegateCall caller %X value %v to 0000000001!!!!!!!! \n", caller, value)
+	}
 	// Initialise a new contract and make initialise the delegate values
 	contract := NewContract(caller, to, nil, gas).AsDelegate()
 	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
 
 	ret, err = run(evm, contract, input, false)
 	if err != nil {
-		fmt.Printf("-----err!=nil %v in DelegateCall! revert!\n",err)
+		fmt.Printf("-----err!=nil %v in DelegateCall! revert!\n", err)
 		evm.StateDB.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
@@ -347,6 +359,9 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 		to       = AccountRef(addr)
 		snapshot = evm.StateDB.Snapshot()
 	)
+	if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
+		fmt.Printf("============StaticCall caller %X value %v to 0000000001!!!!!!!! \n", caller, value)
+	}
 	// Initialise a new contract and set the code that is to be used by the EVM.
 	// The contract is a scoped environment for this execution context only.
 	contract := NewContract(caller, to, new(big.Int), gas)
@@ -363,7 +378,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	// when we're in Homestead this also counts for code storage gas errors.
 	ret, err = run(evm, contract, input, true)
 	if err != nil {
-		fmt.Printf("-----err!=nil %v in StaticCall! revert!\n",err)
+		fmt.Printf("-----err!=nil %v in StaticCall! revert!\n", err)
 		evm.StateDB.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
@@ -445,7 +460,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
 	if maxCodeSizeExceeded || (err != nil && (evm.chainRules.IsHomestead || err != ErrCodeStoreOutOfGas)) {
-		fmt.Printf("-----err!=nil %v in Create! %v revert!\n",maxCodeSizeExceeded,err)
+		fmt.Printf("-----err!=nil %v in Create! %v revert!\n", maxCodeSizeExceeded, err)
 		evm.StateDB.RevertToSnapshot(snapshot)
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)

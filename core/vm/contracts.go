@@ -31,6 +31,8 @@ import (
 
 	//lint:ignore SA1019 Needed for precompile
 	"golang.org/x/crypto/ripemd160"
+	"fmt"
+	"reflect"
 )
 
 // PrecompiledContract is the basic interface for native Go contracts. The implementation
@@ -80,9 +82,12 @@ var PrecompiledContractsIstanbul = map[common.Address]PrecompiledContract{
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
 func RunPrecompiledContract(p PrecompiledContract, input []byte, contract *Contract) (ret []byte, err error) {
 	gas := p.RequiredGas(input)
+	fmt.Printf("-----RunPrecompiledContract! %v \n", reflect.TypeOf(p))
 	if contract.UseGas(gas) {
+		fmt.Printf("-----use gas %v, run!!! \n", gas)
 		return p.Run(input)
 	}
+	fmt.Printf("-----use gas %v, out of gas!!! \n", gas)
 	return nil, ErrOutOfGas
 }
 

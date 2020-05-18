@@ -353,6 +353,9 @@ func (s *StateDB) HasSuicided(addr common.Address) bool {
 func (s *StateDB) AddBalance(addr common.Address, amount *big.Int) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
+		if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
+			fmt.Printf("============AddBalance %v to 0000000001!!!!!!!! \n", amount.Int64())
+		}
 		fmt.Printf("Try to find Where call this method\n")
 		stateObject.AddBalance(amount)
 	}
@@ -681,7 +684,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			stateObject.updateRoot(s.db)
 			s.updateStateObject(stateObject)
 		}
-		fmt.Printf("========addr %v added to stateObjectsDirty \n", addr)
+		fmt.Printf("========addr %X added to stateObjectsDirty \n", addr)
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
 	// Invalidate journal because reverting across transactions is not allowed.
