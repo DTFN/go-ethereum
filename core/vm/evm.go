@@ -222,12 +222,12 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			return nil, gas, nil
 		}
 		if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
-			fmt.Printf("============CALL, caller %X value %v to 0000000001!!!!!!!! Create!!!!!!! \n", caller, value)
+			fmt.Printf("============CALL, caller %X value %v to 0000000001!!!!!!!! Create!!!!!!! \n", caller.Address(), value)
 		}
 		evm.StateDB.CreateAccount(addr)
 	}
 	if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
-		fmt.Printf("============CALL, caller %X value %v to 0000000001!!!!!!!! \n", caller, value)
+		fmt.Printf("============CALL, caller %X value %v to 0000000001!!!!!!!! \n", caller.Address(), value)
 	}
 	evm.Transfer(evm.StateDB, caller.Address(), to.Address(), value)
 	// Initialise a new contract and set the code that is to be used by the EVM.
