@@ -353,6 +353,7 @@ func (s *StateDB) HasSuicided(addr common.Address) bool {
 func (s *StateDB) AddBalance(addr common.Address, amount *big.Int) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
+		fmt.Printf("Try to find Where call this method\n")
 		stateObject.AddBalance(amount)
 	}
 }
