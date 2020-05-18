@@ -311,8 +311,12 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 	} else {
 		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	}
-	
-	fmt.Printf("block.Height: %v,st.state.TrieHash in state transition: %X\n",st.evm.BlockNumber.Int64(),st.state.TrieHash())
+
+	fmt.Printf("block.Height: %v,st.state.TrieHash in state transition: %X\n", st.evm.BlockNumber.Int64(), st.state.TrieHash())
+
+	fmt.Sprintf("0000..1 existed:%v\n",
+		st.state.Exist(common.HexToAddress("0x0000000000000000000000000000000000000001")))
+
 	return ret, st.gasUsed(), vmerr != nil, err
 }
 
