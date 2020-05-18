@@ -454,6 +454,7 @@ func (s *StateDB) deleteStateObject(obj *stateObject) {
 		defer func(start time.Time) { s.AccountUpdates += time.Since(start) }(time.Now())
 	}
 	// Delete the account from the trie
+	obj.deleted = true
 	addr := obj.Address()
 	s.setError(s.trie.TryDelete(addr[:]))
 }
