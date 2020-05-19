@@ -353,10 +353,6 @@ func (s *StateDB) HasSuicided(addr common.Address) bool {
 func (s *StateDB) AddBalance(addr common.Address, amount *big.Int) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		if addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
-			fmt.Printf("============AddBalance %v to 0000000001!!!!!!!! \n", amount.Int64())
-		}
-		fmt.Printf("Try to find Where call this method\n")
 		stateObject.AddBalance(amount)
 	}
 }
@@ -685,7 +681,6 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			stateObject.updateRoot(s.db)
 			s.updateStateObject(stateObject)
 		}
-		fmt.Printf("========addr %X added to stateObjectsDirty \n", addr)
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
 	// Invalidate journal because reverting across transactions is not allowed.
@@ -723,26 +718,11 @@ func (s *StateDB) clearJournalAndRefund() {
 
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) {
-	fmt.Printf("s.trie.Hash: %X\n", s.trie.Hash())
 	defer s.clearJournalAndRefund()
 
-	fmt.Printf("s.journal.dirties:%v before journal dirties, %v", len(s.journal.dirties), s.journal.dirties)
-	fmt.Printf("s.journal.entries:%v before journal dirties", len(s.journal.entries))
-	fmt.Printf(",st.state.TrieHash in go-ethereum before journal dirties: %X\n", s.TrieHash())
 	for addr := range s.journal.dirties {
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
-	for key, _ := range s.stateObjectsDirty {
-		fmt.Printf("key,%X\n", key)
-		fmt.Printf(key.String())
-		fmt.Println("try to print key")
-	}
-	fmt.Printf("s.stateObjectDirty after journal dirties:%v,%v", len(s.stateObjectsDirty), s.stateObjectsDirty)
-	fmt.Printf(",st.state.TrieHash in go-ethereum after journal dirties: %X\n", s.TrieHash())
-	//if strings.EqualFold(s.TrieHash().String(),"0xbe1be537fc987bd97230f123a16fe71de388a1927faa9dda1eb9cb455968010a"){
-	//	delete(s.stateObjectsDirty, common.HexToAddress("0x0000000000000000000000000000000000000001"))
-	//}
-
 	// Commit objects to the trie.
 	for addr, stateObject := range s.stateObjects {
 		_, isDirty := s.stateObjectsDirty[addr]
@@ -766,7 +746,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 		}
 		delete(s.stateObjectsDirty, addr)
 	}
-	fmt.Printf(",st.state.TrieHash in go-ethereum after stateObjectsDirty: %X\n", s.TrieHash())
 	// Write trie changes.
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
 		var account Account

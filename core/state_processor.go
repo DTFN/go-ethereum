@@ -17,7 +17,6 @@
 package core
 
 import (
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -127,13 +126,11 @@ func applyTransactionMessage(config *params.ChainConfig, bc *BlockChain, author 
 	}
 	// Update the state with pending changes
 	var root []byte
-	fmt.Printf("block.Height: %v ,st.state.TrieHash in applyTransactionMessage before Finalise: %X\n",header.Number.Int64(),statedb.TrieHash())
 	if config.IsByzantium(header.Number) {
 		statedb.Finalise(true)
 	} else {
 		root = statedb.IntermediateRoot(config.IsEIP158(header.Number)).Bytes()
 	}
-	fmt.Printf("block.Height: %v ,st.state.TrieHash in applyTransactionMessage after Finalise: %X\n",header.Number.Int64(),statedb.TrieHash())
 	*usedGas += gas
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
