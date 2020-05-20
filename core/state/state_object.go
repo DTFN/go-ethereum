@@ -351,9 +351,6 @@ func (s *stateObject) AddBalance(amount *big.Int) {
 	// clearing (0,0,0 objects) can take effect.
 	if amount.Sign() == 0 {
 		if s.empty() {
-			if s.address == common.HexToAddress("0x0000000000000000000000000000000000000001") {
-				fmt.Printf("============touch 0000000001!!!!!!!! \n")
-			}
 			s.touch()
 		}
 

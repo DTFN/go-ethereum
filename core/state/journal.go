@@ -20,8 +20,6 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"fmt"
-	"reflect"
 )
 
 // journalEntry is a modification entry in the state change journal that can be
@@ -53,9 +51,6 @@ func newJournal() *journal {
 func (j *journal) append(entry journalEntry) {
 	j.entries = append(j.entries, entry)
 	if addr := entry.dirtied(); addr != nil {
-		if *addr == common.HexToAddress("0x0000000000000000000000000000000000000001") {
-			fmt.Printf("============entry type %v . %v 0000000001!!!!!!!! \n",reflect.TypeOf(entry), entry)
-		}
 		j.dirties[*addr]++
 	}
 }
