@@ -33,7 +33,7 @@ type FrozeItem struct {
 }
 
 // tx.To equls 0x555...55, we should try to check whether it is legal
-func IsFrozeBlocked(from common.Address, txDataBytes []byte, height int64) (err error) {
+func IsFrozeBlocked(from common.Address, txDataBytes []byte, height int64,version int) (err error) {
 	if !bytes.Equal(from.Bytes(), AccountAdmin.Bytes()) {
 		fmt.Printf("not account admin %X sent an froze tx \n", from)
 		return fmt.Errorf("not account admin %X sent an froze tx \n", from)
@@ -58,8 +58,8 @@ func IsFrozeBlocked(from common.Address, txDataBytes []byte, height int64) (err 
 	return nil
 }
 
-//We should check it again , for that state may have changed in the prior tx of same block.
-func DoFrozeHandle(from common.Address, to common.Address, txDataBytes []byte, height int64) (err error){
+//We should check it again , for the state may have changed in the prior tx of same block.
+func DoFrozeHandle(from common.Address, to common.Address, txDataBytes []byte, height int64,version int) (err error){
 	if !bytes.Equal(from.Bytes(), AccountAdmin.Bytes()) {
 		fmt.Printf("not account admin %X sent an froze tx \n", from)
 		return fmt.Errorf("not account admin %X sent an froze tx \n", from)
