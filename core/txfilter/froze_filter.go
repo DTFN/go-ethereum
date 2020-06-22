@@ -24,11 +24,9 @@ var (
 )
 
 // tx.To equls 0x555...55, we should try to check whether it is legal
+//If appversion < 6, we needn't to verify it.
 func IsFrozeBlocked(from common.Address, txDataBytes []byte) (err error) {
-	//If appversion < 6, we needn't to verify it.
-	if AppVersion < 6 {
-		return nil
-	}
+	fmt.Println("-------------IsFrozeBlocked Start-------------------")
 	if !bytes.Equal(from.Bytes(), AccountAdmin.Bytes()) {
 		fmt.Printf("not account admin %X sent an froze tx \n", from)
 		return fmt.Errorf("not account admin %X sent an froze tx \n", from)
@@ -50,6 +48,8 @@ func IsFrozeBlocked(from common.Address, txDataBytes []byte) (err error) {
 		return fmt.Errorf("unrecognized operation type:%v \n", frozeData.OperationType)
 	}
 
+
+	fmt.Println("-------------IsFrozeBlocked end-------------------")
 	return nil
 }
 
