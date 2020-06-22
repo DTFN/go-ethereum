@@ -51,6 +51,8 @@ var (
 	// ErrInvalidSender is returned if the transaction contains an invalid signature.
 	ErrInvalidSender = errors.New("invalid sender")
 
+	ErrInvalidFrozeData = errors.New("invalid froze data")
+
 	ErrInvalidRelaySignature = errors.New("invalid relayer signature for relaytx")
 
 	// ErrNonceTooLow is returned if the nonce of a transaction is lower than the

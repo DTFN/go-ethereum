@@ -33,6 +33,9 @@ func IsFrozeBlocked(from common.Address, txDataBytes []byte) (err error) {
 	}
 
 	frozeData, err := UnMarshalFrozeData(txDataBytes)
+	fmt.Println("-------------txDataBytes-----------------")
+	fmt.Println(string(txDataBytes))
+	fmt.Println("-------------txDataBytes-----------------")
 	if frozeData.OperationType == "froze" {
 		if IsFrozed(frozeData.FrozeAddress) {
 			fmt.Printf("account %X have already been frozen.\n", frozeData.FrozeAddress)
