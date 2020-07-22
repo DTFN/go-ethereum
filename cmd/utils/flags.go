@@ -540,6 +540,13 @@ var (
 		Usage: "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
 		Value: strings.Join(node.DefaultConfig.HTTPVirtualHosts, ","),
 	}
+
+	RPCIPSFlag = cli.StringFlag{
+		Name:  "rpcips",
+		Usage: "Comma separated list of ips from which to accept requests (server enforced). Accepts '*' wildcard.",
+		Value: strings.Join(node.DefaultConfig.HTTPAllowedIPs, ","),
+	}
+
 	RPCApiFlag = cli.StringFlag{
 		Name:  "rpcapi",
 		Usage: "API's offered over the HTTP-RPC interface",
@@ -923,6 +930,9 @@ func setHTTP(ctx *cli.Context, cfg *node.Config) {
 	}
 	if ctx.GlobalIsSet(RPCVirtualHostsFlag.Name) {
 		cfg.HTTPVirtualHosts = splitAndTrim(ctx.GlobalString(RPCVirtualHostsFlag.Name))
+	}
+	if ctx.GlobalIsSet(RPCIPSFlag.Name) {
+		cfg.HTTPAllowedIPs = splitAndTrim(ctx.GlobalString(RPCIPSFlag.Name))
 	}
 }
 

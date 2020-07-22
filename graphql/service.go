@@ -33,6 +33,7 @@ import (
 type Service struct {
 	endpoint string           // The host:port endpoint for this service.
 	cors     []string         // Allowed CORS domains
+	ips      []string         // Allowed ips
 	vhosts   []string         // Recognised vhosts
 	timeouts rpc.HTTPTimeouts // Timeout settings for HTTP requests.
 	backend  ethapi.Backend   // The backend that queries will operate onn.
@@ -68,7 +69,7 @@ func (s *Service) Start(server *p2p.Server) error {
 	if s.listener, err = net.Listen("tcp", s.endpoint); err != nil {
 		return err
 	}
-	go rpc.NewHTTPServer(s.cors, s.vhosts, s.timeouts, s.handler).Serve(s.listener)
+	go rpc.NewHTTPServer(s.cors, s.vhosts, s.ips,s.timeouts, s.handler).Serve(s.listener)
 	log.Info("GraphQL endpoint opened", "url", fmt.Sprintf("http://%s", s.endpoint))
 	return nil
 }

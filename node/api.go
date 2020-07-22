@@ -178,6 +178,8 @@ func (api *PrivateAdminAPI) StartRPC(host *string, port *int, cors *string, apis
 		}
 	}
 
+	allowedVIPs:= api.node.config.HTTPAllowedIPs
+
 	modules := api.node.httpWhitelist
 	if apis != nil {
 		modules = nil
@@ -186,7 +188,7 @@ func (api *PrivateAdminAPI) StartRPC(host *string, port *int, cors *string, apis
 		}
 	}
 
-	if err := api.node.startHTTP(fmt.Sprintf("%s:%d", *host, *port), api.node.rpcAPIs, modules, allowedOrigins, allowedVHosts, api.node.config.HTTPTimeouts); err != nil {
+	if err := api.node.startHTTP(fmt.Sprintf("%s:%d", *host, *port), api.node.rpcAPIs, modules, allowedOrigins, allowedVHosts, allowedVIPs,api.node.config.HTTPTimeouts); err != nil {
 		return false, err
 	}
 	return true, nil

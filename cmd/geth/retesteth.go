@@ -886,11 +886,12 @@ func retesteth(ctx *cli.Context) error {
 		},
 	}
 	vhosts := splitAndTrim(ctx.GlobalString(utils.RPCVirtualHostsFlag.Name))
+	ips := splitAndTrim(ctx.GlobalString(utils.RPCIPSFlag.Name))
 	cors := splitAndTrim(ctx.GlobalString(utils.RPCCORSDomainFlag.Name))
 
 	// start http server
 	httpEndpoint := fmt.Sprintf("%s:%d", ctx.GlobalString(utils.RPCListenAddrFlag.Name), ctx.Int(rpcPortFlag.Name))
-	listener, _, err := rpc.StartHTTPEndpoint(httpEndpoint, rpcAPI, []string{"test", "eth", "debug", "web3"}, cors, vhosts, rpc.DefaultHTTPTimeouts)
+	listener, _, err := rpc.StartHTTPEndpoint(httpEndpoint, rpcAPI, []string{"test", "eth", "debug", "web3"}, cors, vhosts,ips, rpc.DefaultHTTPTimeouts)
 	if err != nil {
 		utils.Fatalf("Could not start RPC api: %v", err)
 	}

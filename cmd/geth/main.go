@@ -155,6 +155,7 @@ var (
 		utils.RPCPortFlag,
 		utils.RPCCORSDomainFlag,
 		utils.RPCVirtualHostsFlag,
+		utils.RPCIPSFlag,
 		utils.GraphQLEnabledFlag,
 		utils.GraphQLListenAddrFlag,
 		utils.GraphQLPortFlag,

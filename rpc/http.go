@@ -212,10 +212,10 @@ func (t *httpServerConn) SetWriteDeadline(time.Time) error { return nil }
 // NewHTTPServer creates a new HTTP RPC server around an API provider.
 //
 // Deprecated: Server implements http.Handler
-func NewHTTPServer(cors []string, vhosts []string, timeouts HTTPTimeouts, srv http.Handler) *http.Server {
+func NewHTTPServer(cors []string, vhosts []string, ips []string, timeouts HTTPTimeouts, srv http.Handler) *http.Server {
 	// Wrap the CORS-handler within a host-handler
 	handler := newCorsHandler(srv, cors)
-	handler = newVHostHandler(vhosts, handler)
+	handler = newVHostHandler(vhosts, ips, handler)
 	handler = newGzipHandler(handler)
 
 	// Make sure timeout values are meaningful
@@ -318,6 +318,7 @@ func newCorsHandler(srv http.Handler, allowedOrigins []string) http.Handler {
 type virtualHostHandler struct {
 	vhosts map[string]struct{}
 	next   http.Handler
+	ips    map[string]struct{}
 }
 
 // ServeHTTP serves JSON-RPC requests over HTTP, implements http.Handler
@@ -332,11 +333,19 @@ func (h *virtualHostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Either invalid (too many colons) or no port specified
 		host = r.Host
 	}
+
+	network := strings.Split(r.RemoteAddr, ":")
+	if len(h.ips) != 0 {
+		if _, exist := h.ips[network[0]]; !exist {
+			http.Error(w, "invalid ip specified", http.StatusForbidden)
+			return
+		}
+	}
+
 	if ipAddr := net.ParseIP(host); ipAddr != nil {
 		// It's an IP address, we can serve that
 		h.next.ServeHTTP(w, r)
 		return
-
 	}
 	// Not an IP address, but a hostname. Need to validate
 	if _, exist := h.vhosts["*"]; exist {
@@ -350,10 +359,15 @@ func (h *virtualHostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "invalid host specified", http.StatusForbidden)
 }
 
-func newVHostHandler(vhosts []string, next http.Handler) http.Handler {
+func newVHostHandler(vhosts []string, ips []string, next http.Handler) http.Handler {
 	vhostMap := make(map[string]struct{})
 	for _, allowedHost := range vhosts {
 		vhostMap[strings.ToLower(allowedHost)] = struct{}{}
 	}
-	return &virtualHostHandler{vhostMap, next}
+	ipMap := make(map[string]struct{})
+	for _, allowedIP := range ips {
+		ipMap[strings.ToLower(allowedIP)] = struct{}{}
+	}
+
+	return &virtualHostHandler{vhostMap, next, ipMap}
 }

@@ -161,6 +161,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.RPCGlobalGasCap,
 			utils.RPCCORSDomainFlag,
 			utils.RPCVirtualHostsFlag,
+			utils.RPCIPSFlag,
 			utils.WSEnabledFlag,
 			utils.WSListenAddrFlag,
 			utils.WSPortFlag,
