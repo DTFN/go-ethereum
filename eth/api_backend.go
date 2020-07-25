@@ -135,7 +135,7 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 	// Pending state is only known by the miner
 	if number == rpc.PendingBlockNumber {
 		state := b.eth.txPool.State().StateDB.Copy()
-		block := b.eth.blockchain.CurrentBlock()
+		block := b.eth.blockchain.PendingBlock()
 		return state, block.Header(), nil
 	}
 	// Otherwise resolve the block number and return its state
