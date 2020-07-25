@@ -286,7 +286,7 @@ func (api *PublicDebugAPI) DumpBlock(blockNr rpc.BlockNumber) (state.Dump, error
 		return stateDb.RawDump(false, false, true), nil
 	}
 	var block *types.Block
-	if blockNr == rpc.LatestBlockNumber {
+	if blockNr == rpc.LatestBlockNumber || blockNr == rpc.PendingBlockNumber{
 		block = api.eth.blockchain.CurrentBlock()
 	} else {
 		block = api.eth.blockchain.GetBlockByNumber(uint64(blockNr))
