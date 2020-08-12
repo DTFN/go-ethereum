@@ -759,6 +759,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if tx.Gas() < intrGas {
 		return ErrIntrinsicGas
 	}
+
+	fmt.Println("========txFrom=============")
+	fmt.Println(from.String())
+	fmt.Println("========txFrom=============")
+
 	return nil
 }
 
