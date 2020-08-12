@@ -228,13 +228,15 @@ type TxPool struct {
 	all     map[common.Hash]*types.Transaction // All transactions to allow lookups
 	priced  *txPricedList                      // All transactions sorted by price
 
-	blockArrive       bool //true when loop() wants to get lock
-	appConsume        bool
-	pendingTxPreEvent map[common.Hash]*TxPreEvent
-	relayTxInfo       map[common.Hash]*RelayInfo
-	flowLimit         bool
-	journalTxs        chan *types.Transaction
-	mempoolTxsLen     int
+	blockArrive         bool //true when loop() wants to get lock
+	appConsume          bool
+	pendingTxPreEvent   map[common.Hash]*TxPreEvent
+	relayTxInfo         map[common.Hash]*RelayInfo
+	flowLimit           bool
+	journalTxs          chan *types.Transaction
+	handledJournalTxNum int
+	discardJournalTxNum int
+	mempoolTxsLen       int
 
 	wg sync.WaitGroup // for shutdown sync
 
@@ -983,27 +985,22 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 // AddLocalsInit is called in NewTxPool
 func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	errs = make([]error, len(txs))
-	pool.mu.Lock()
 
-	handled := 0
-	discard := 0
 	total := len(txs)
-	fmt.Printf("TxPool replay journals begin \n")
+	fmt.Printf("TxPool batch replay journals begin \n")
 	for i, tx := range txs {
-		if i > journalTxSize>>1 {
-			errs[i] = fmt.Errorf("tx count %v excceeds half journalTxSize %v", i, journalTxSize>>1)
-			fmt.Printf("tx count %v excceeds half journalTxSize %v", i, journalTxSize>>1)
-			discard++
+		if pool.handledJournalTxNum >= journalTxSize>>1 {
+			errs[i] = fmt.Errorf("tx %X excceeds half journalTxSize %v", tx.Hash(), journalTxSize>>1)
+			fmt.Printf("tx %X excceeds half journalTxSize %v \n", tx.Hash(), journalTxSize>>1)
+			pool.discardJournalTxNum++
 			continue
 		}
 		pool.journalTxs <- tx
-		handled++
+		pool.handledJournalTxNum++
 	}
-	if handled > 0 {
-		pool.mempoolTxsLen = handled //though this is not mempool txs, this can be used to limit tx pressure on start
-	}
-	pool.mu.Unlock()
-	fmt.Printf("TxPool replay journals end. total tx count %v handled %v discard %v \n", total, handled, discard)
+	pool.mempoolTxsLen = pool.handledJournalTxNum //though this is not mempool txs, this can be used to limit tx pressure on start
+
+	fmt.Printf("TxPool batch replay journals end. batch tx count %v current handled %v discard %v \n", total, pool.handledJournalTxNum, pool.discardJournalTxNum)
 	return
 }
 

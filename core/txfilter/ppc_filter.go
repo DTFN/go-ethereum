@@ -36,8 +36,8 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64, sim bo
 		return ErrAuthTableNotCreate
 	}
 	if AppVersion < 4 {
-		fmt.Printf("version<4,not support auth tx sent by %X\n",from)
-		return fmt.Errorf("version<4,not support auth tx \n")
+		fmt.Printf("version < 4, not support auth tx sent by %X\n",from)
+		return fmt.Errorf("version < 4, not support auth tx \n")
 	}
 	if !bytes.Equal(from.Bytes(), PPChainAdmin.Bytes()) {
 		fmt.Printf("not admin %X sent an auth tx \n", from)
@@ -104,8 +104,8 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 		return ErrAuthTableNotCreate
 	}
 	if AppVersion < 4 {
-		fmt.Printf("version<4,not support auth tx sent by %X\n",from)
-		return fmt.Errorf("version<4,not support auth tx \n")
+		fmt.Printf("version < 4, not support auth tx sent by %X\n",from)
+		return fmt.Errorf("version < 4, not support auth tx \n")
 	}
 	if !bytes.Equal(from.Bytes(), PPChainAdmin.Bytes()) {
 		fmt.Printf("not admin %X sent an auth tx \n", from)
