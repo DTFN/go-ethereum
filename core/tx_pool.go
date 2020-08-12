@@ -989,9 +989,9 @@ func (pool *TxPool) AddLocalsInit(txs []*types.Transaction) (errs []error) {
 	total := len(txs)
 	fmt.Printf("TxPool batch replay journals begin \n")
 	for i, tx := range txs {
-		if pool.handledJournalTxNum >= journalTxSize>>1 {
-			errs[i] = fmt.Errorf("tx %X excceeds half journalTxSize %v", tx.Hash(), journalTxSize>>1)
-			fmt.Printf("tx %X excceeds half journalTxSize %v \n", tx.Hash(), journalTxSize>>1)
+		if pool.handledJournalTxNum >= journalTxSize {
+			errs[i] = fmt.Errorf("tx %X excceeds journalTxSize %v", tx.Hash(), journalTxSize)
+			fmt.Printf("tx %X excceeds journalTxSize %v \n", tx.Hash(), journalTxSize)
 			pool.discardJournalTxNum++
 			continue
 		}
