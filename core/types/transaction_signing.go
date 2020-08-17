@@ -17,9 +17,14 @@
 package types
 
 import (
+	"bytes"
 	"crypto/ecdsa"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto/gm/sm2"
+	"github.com/ethereum/go-ethereum/crypto/gm/sm3"
+	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -137,7 +142,8 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	}
 	V := new(big.Int).Sub(tx.data.V, s.chainIdMul)
 	V.Sub(V, big8)
-	return recoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true)
+	//return recoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true)
+	return recoverPlainGM(tx)
 }
 
 func (s EIP155Signer) RelaySigner(tx *Transaction, from common.Address) (common.Address, error) {
@@ -149,7 +155,8 @@ func (s EIP155Signer) RelaySigner(tx *Transaction, from common.Address) (common.
 	}
 	V := new(big.Int).Sub(tx.data.V, s.chainIdMul)
 	V.Sub(V, big8)
-	return recoverPlain(s.HashWithFrom(tx, from), tx.data.R, tx.data.S, V, true)
+	//return recoverPlain(s.HashWithFrom(tx, from), tx.data.R, tx.data.S, V, true)
+	return recoverPlainGM(tx)
 }
 
 // WithSignature returns a new transaction with the given signature. This signature
@@ -209,7 +216,8 @@ func (hs HomesteadSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v 
 }
 
 func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
-	return recoverPlain(hs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, true)
+	//return recoverPlain(hs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, true)
+	return recoverPlainGM(tx)
 }
 
 type FrontierSigner struct{}
@@ -257,11 +265,13 @@ func (fs FrontierSigner) HashWithFrom(tx *Transaction, from common.Address) comm
 }
 
 func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
-	return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
+	//return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
+	return recoverPlainGM(tx)
 }
 
 func (fs FrontierSigner) RelaySigner(tx *Transaction, from common.Address) (common.Address, error) {
-	return recoverPlain(fs.HashWithFrom(tx, from), tx.data.R, tx.data.S, tx.data.V, false)
+	//return recoverPlain(fs.HashWithFrom(tx, from), tx.data.R, tx.data.S, tx.data.V, false)
+	return recoverPlainGM(tx)
 }
 
 func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
@@ -289,6 +299,64 @@ func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (commo
 	var addr common.Address
 	copy(addr[:], crypto.Keccak256(pub[1:])[12:])
 	return addr, nil
+}
+
+func TxRLPEncode(tx *Transaction) []byte {
+	elements := []interface{}{
+		tx.Nonce(),
+		tx.GasPrice(),
+		tx.Gas(),
+		tx.To(),
+		tx.Value(),
+		tx.Data(),
+	}
+	buffer := bytes.Buffer{}
+	rlp.Encode(&buffer, elements)
+
+	return buffer.Bytes()
+}
+
+func recoverPlainGM(tx *Transaction) (common.Address, error) {
+	defaultUid := []byte{0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38}
+
+	pubkeyBytes := make([]byte, 64)
+	copy(pubkeyBytes, tx.data.PublicKeyX)
+	copy(pubkeyBytes[32:], tx.data.PublicKeyY)
+
+	pubkeyXBytes := tx.data.PublicKeyX
+	pubkeyYBytes := tx.data.PublicKeyY
+
+	pubkeyX := &big.Int{}
+	pubkeyX.SetBytes(pubkeyXBytes)
+
+	pubkeyY := &big.Int{}
+	pubkeyY.SetBytes(pubkeyYBytes)
+
+	pubKey := sm2.PublicKey{X: pubkeyX, Y: pubkeyY}
+	pubKey.Curve = sm2.P256Sm2()
+
+	messageInRLP := TxRLPEncode(tx)
+
+	encodedMessageString := base64.StdEncoding.EncodeToString(messageInRLP)
+
+	R := tx.data.R
+	S := tx.data.S
+
+	verified := sm2.Sm2Verify(&pubKey, []byte(encodedMessageString), defaultUid, R, S)
+
+	if verified {
+		var addr common.Address
+
+		sm3Hash := sm3.New()
+		sm3Hash.Write(pubkeyBytes)
+		hashValue := sm3Hash.Sum(nil)
+		copy(addr[:], hashValue[12:])
+
+		fmt.Println("签名验证成功，地址：", addr.String())
+		return addr, nil
+	}
+
+	return common.Address{}, fmt.Errorf("签名验证失败.")
 }
 
 // deriveChainId derives the chain id from the given v parameter

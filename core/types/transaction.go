@@ -60,6 +60,9 @@ type txdata struct {
 	R *big.Int `json:"r" gencodec:"required"`
 	S *big.Int `json:"s" gencodec:"required"`
 
+	PublicKeyX    []byte        `json:"pubkeyx"   gencodec:"required"`
+	PublicKeyY    []byte        `json:"pubkeyy"   gencodec:"required"`
+
 	// This is only used when marshaling to JSON.
 	Hash *common.Hash `json:"hash" rlp:"-"`
 }

@@ -25,6 +25,8 @@ func (t txdata) MarshalJSON() ([]byte, error) {
 		V            *hexutil.Big    `json:"v" gencodec:"required"`
 		R            *hexutil.Big    `json:"r" gencodec:"required"`
 		S            *hexutil.Big    `json:"s" gencodec:"required"`
+		PublicKeyX   hexutil.Bytes   `json:"pubkeyx"   gencodec:"required"`
+		PublicKeyY   hexutil.Bytes   `json:"pubkeyy"   gencodec:"required"`
 		Hash         *common.Hash    `json:"hash" rlp:"-"`
 	}
 	var enc txdata
@@ -37,6 +39,10 @@ func (t txdata) MarshalJSON() ([]byte, error) {
 	enc.V = (*hexutil.Big)(t.V)
 	enc.R = (*hexutil.Big)(t.R)
 	enc.S = (*hexutil.Big)(t.S)
+
+	enc.PublicKeyX = t.PublicKeyX
+	enc.PublicKeyY = t.PublicKeyY
+
 	enc.Hash = t.Hash
 	return json.Marshal(&enc)
 }
@@ -53,6 +59,8 @@ func (t *txdata) UnmarshalJSON(input []byte) error {
 		V            *hexutil.Big    `json:"v" gencodec:"required"`
 		R            *hexutil.Big    `json:"r" gencodec:"required"`
 		S            *hexutil.Big    `json:"s" gencodec:"required"`
+		PulibcKeyX   *hexutil.Bytes  `json:"pubkeyx 	  gencodec:"required""`
+		PulibcKeyY   *hexutil.Bytes  `json:"pubkeyy 	  gencodec:"required""`
 		Hash         *common.Hash    `json:"hash" rlp:"-"`
 	}
 	var dec txdata
@@ -82,6 +90,17 @@ func (t *txdata) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'input' for txdata")
 	}
 	t.Payload = *dec.Payload
+
+	if dec.PulibcKeyX == nil {
+		return errors.New("missing required field 'publicKey-x' for txdata")
+	}
+	t.PublicKeyX = *dec.PulibcKeyX
+
+	if dec.PulibcKeyY == nil {
+		return errors.New("missing required field 'publicKey-y' for txdata")
+	}
+	t.PublicKeyY = *dec.PulibcKeyY
+
 	if dec.V == nil {
 		return errors.New("missing required field 'v' for txdata")
 	}
