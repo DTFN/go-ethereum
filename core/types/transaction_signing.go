@@ -19,7 +19,7 @@ package types
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto/gm/sm2"
@@ -317,7 +317,7 @@ func TxRLPEncode(tx *Transaction) []byte {
 }
 
 func recoverPlainGM(tx *Transaction) (common.Address, error) {
-	defaultUid := []byte{0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38}
+	default_uid := []byte{0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38}
 
 	pubkeyBytes := make([]byte, 64)
 	copy(pubkeyBytes, tx.data.PublicKeyX)
@@ -327,7 +327,7 @@ func recoverPlainGM(tx *Transaction) (common.Address, error) {
 	pubkeyYBytes := tx.data.PublicKeyY
 
 	pubkeyX := &big.Int{}
-	pubkeyX.SetBytes(pubkeyXBytes)
+	pubkeyX.SetBytes(pubkeyXBytes);
 
 	pubkeyY := &big.Int{}
 	pubkeyY.SetBytes(pubkeyYBytes)
@@ -335,18 +335,24 @@ func recoverPlainGM(tx *Transaction) (common.Address, error) {
 	pubKey := sm2.PublicKey{X: pubkeyX, Y: pubkeyY}
 	pubKey.Curve = sm2.P256Sm2()
 
+	fmt.Println("公钥-X: ", pubkeyXBytes)
+	fmt.Println("公钥-Y: ", pubkeyYBytes)
+
 	messageInRLP := TxRLPEncode(tx)
 
-	encodedMessageString := base64.StdEncoding.EncodeToString(messageInRLP)
+	sm3Hash := sm3.New()
+	sm3Hash.Write(messageInRLP)
+	hashValue := sm3Hash.Sum(nil)
 
+	encodedMessageString := hex.EncodeToString(hashValue)
+	
 	R := tx.data.R
 	S := tx.data.S
 
-	verified := sm2.Sm2Verify(&pubKey, []byte(encodedMessageString), defaultUid, R, S)
+	verified := sm2.Sm2Verify(&pubKey, []byte(encodedMessageString), default_uid, R, S)
 
 	if verified {
 		var addr common.Address
-
 		sm3Hash := sm3.New()
 		sm3Hash.Write(pubkeyBytes)
 		hashValue := sm3Hash.Sum(nil)
