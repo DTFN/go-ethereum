@@ -19,7 +19,10 @@ package vm
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
+	"github.com/ethereum/go-ethereum/crypto/gm/sm2"
+	"github.com/ethereum/go-ethereum/crypto/gm/sm3"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -99,6 +102,48 @@ func (c *ecrecover) RequiredGas(input []byte) uint64 {
 }
 
 func (c *ecrecover) Run(input []byte) ([]byte, error) {
+	default_uid := []byte{0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38}
+
+	messageBytes := input[:32]
+	//VBytes := input[32:64]
+	RBytes := input[64:96]
+	SBytes := input[96:128]
+	PubkeyXBytes := input[128:160]
+	PubkeyYBytes := input[160:192]
+
+	r := new(big.Int).SetBytes(RBytes)
+	s := new(big.Int).SetBytes(SBytes)
+
+	pubkeyX := &big.Int{}
+	pubkeyX.SetBytes(PubkeyXBytes)
+
+	pubkeyY := &big.Int{}
+	pubkeyY.SetBytes(PubkeyYBytes)
+
+	pubKey := sm2.PublicKey{X: pubkeyX, Y: pubkeyY}
+	pubKey.Curve = sm2.P256Sm2()
+
+	verified := sm2.Sm2Verify(&pubKey, []byte(hex.EncodeToString(messageBytes)), default_uid, r, s)
+
+	pubkeyBytes := make([]byte, 64)
+	copy(pubkeyBytes, PubkeyXBytes)
+	copy(pubkeyBytes[32:], PubkeyYBytes)
+
+	if verified {
+		var addr common.Address
+		sm3Hash := sm3.New()
+		sm3Hash.Write(pubkeyBytes)
+		hashValue := sm3Hash.Sum(nil)
+		copy(addr[:], hashValue[12:])
+
+		fmt.Println("ecrecover内置合约，签名验证成功，地址：", addr.String())
+		return addr.Bytes(), nil
+	}
+
+	return []byte(""), nil
+}
+
+func (c *ecrecover) RealRun(input []byte) ([]byte, error) {
 	const ecRecoverInputLength = 128
 
 	input = common.RightPadBytes(input, ecRecoverInputLength)
