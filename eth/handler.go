@@ -131,6 +131,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 			manager.fastSync = uint32(1)
 			log.Warn("Switch sync mode from full sync to fast sync")
 		}
+		//log.Warn("mode == downloader.FullSync ")
 	} else {
 		if blockchain.CurrentBlock().NumberU64() > 0 {
 			// Print warning log if database is not empty to run fast sync.
@@ -138,8 +139,10 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		} else {
 			// If fast sync was requested and our database is empty, grant it
 			manager.fastSync = uint32(1)
+			//log.Warn("blockNumber =0. manager.fastSync = 1")
 		}
 	}
+
 	// If we have trusted checkpoints, enforce them on the chain
 	if checkpoint != nil {
 		manager.checkpointNumber = (checkpoint.SectionIndex+1)*params.CHTFrequency - 1
@@ -151,7 +154,8 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 	// bloom when it's done.
 	var stateBloom *trie.SyncBloom
 	if atomic.LoadUint32(&manager.fastSync) == 1 {
-		stateBloom = trie.NewSyncBloom(uint64(cacheLimit), chaindb)
+		log.Warn("trie.NewSyncBloom", "cacheLimit", cacheLimit)
+		stateBloom = trie.NewSyncBloom(uint64(8), chaindb)  //modified for debug memory
 	}
 	manager.downloader = downloader.New(manager.checkpointNumber, chaindb, stateBloom, manager.eventMux, blockchain, nil, manager.removePeer)
 
@@ -391,7 +395,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// Status messages should never arrive after the handshake
 		return errResp(ErrExtraStatusMsg, "uncontrolled status message")
 
-	// Block header query, collect the requested headers and reply
+		// Block header query, collect the requested headers and reply
 	case msg.Code == GetBlockHeadersMsg:
 		// Decode the complex header query
 		var query getBlockHeadersData
@@ -899,8 +903,8 @@ func (pm *ProtocolManager) txBroadcastLoop() {
 		select {
 		case event := <-pm.txsCh:
 			// For testing purpose only, disable propagation
-			txs:=make([]*types.Transaction,0)
-			txs=append(txs, event.Tx)
+			txs := make([]*types.Transaction, 0)
+			txs = append(txs, event.Tx)
 			if pm.broadcastTxAnnouncesOnly {
 				pm.BroadcastTransactions(types.Transactions(txs), false)
 				continue
@@ -908,7 +912,7 @@ func (pm *ProtocolManager) txBroadcastLoop() {
 			pm.BroadcastTransactions(types.Transactions(txs), true)  // First propagate transactions to peers
 			pm.BroadcastTransactions(types.Transactions(txs), false) // Only then announce to the rest
 
-		// Err() channel will be closed when unsubscribing.
+			// Err() channel will be closed when unsubscribing.
 		case <-pm.txsSub.Err():
 			return
 		}
