@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/txfilter"
 	"io"
 	"math/big"
 	"unsafe"
@@ -315,6 +316,17 @@ func (r Receipts) DeriveFields(config *params.ChainConfig, hash common.Hash, num
 			// Deriving the signer is expensive, only do if it's actually needed
 			from, _ := Sender(signer, txs[i])
 			r[i].ContractAddress = crypto.CreateAddress(from, txs[i].Nonce())
+		} else {
+			if txfilter.IsRelayTxFromClient(*txs[i].To()) && txfilter.AppVersion >= 4 {
+				subTx, _ := DecodeTxFromHexBytes(txs[i].Data())
+				if subTx != nil {
+					if subTx.To() == nil {
+						from, _ := Sender(signer, txs[i])
+						r[i].ContractAddress = crypto.CreateAddress(from, txs[i].Nonce())
+						fmt.Printf("relay deploy address : %s\n", r[i].ContractAddress.String())
+					}
+				}
+			}
 		}
 		// The used gas can be calculated based on previous r
 		if i == 0 {
