@@ -151,7 +151,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 	// bloom when it's done.
 	var stateBloom *trie.SyncBloom
 	if atomic.LoadUint32(&manager.fastSync) == 1 {
-		stateBloom = trie.NewSyncBloom(uint64(cacheLimit), chaindb)
+		stateBloom = trie.NewSyncBloom(uint64(8), chaindb)
 	}
 	manager.downloader = downloader.New(manager.checkpointNumber, chaindb, stateBloom, manager.eventMux, blockchain, nil, manager.removePeer)
 
