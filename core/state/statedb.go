@@ -24,7 +24,6 @@ import (
 	"sort"
 	"time"
 
-	"bytes"
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/txfilter"
@@ -796,26 +795,6 @@ func (s *StateDB) InitAuthTable() *txfilter.AuthTable {
 		err := json.Unmarshal(nextBytes, txfilter.EthAuthTable)
 		if err != nil {
 			panic(fmt.Sprintf("Unmarshal AuthTable error %v", err))
-		}
-	}
-	key := []byte("ExtendAuthTable")
-	keyHash := common.BytesToHash(key)
-	valueHash := s.GetState(permitTableDataAddress, keyHash)
-	if !bytes.Equal(valueHash.Bytes(), common.Hash{}.Bytes()) {
-		trie := s.StorageTrie(permitTableDataAddress)
-		TmAddressToSignerData, err := trie.TryGet(key)
-		if err != nil {
-			panic(fmt.Sprintf("resolve TmAddressToSigner err %v", err))
-		}
-		if len(TmAddressToSignerData) == 0 {
-			// no predata existed
-			panic("len(TmAddressToSignerData) == 0")
-		} else {
-			fmt.Printf("TmAddressToSignerData Not nil \n")
-			err := json.Unmarshal(TmAddressToSignerData, &txfilter.EthAuthTable.ExtendAuthTable)
-			if err != nil {
-				panic(fmt.Sprintf("Unmarshal TmAddressToSignerData error %v", err))
-			}
 		}
 	}
 	txfilter.EthAuthTableCopy = txfilter.EthAuthTable.Copy()

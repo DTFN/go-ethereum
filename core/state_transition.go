@@ -31,7 +31,6 @@ import (
 
 var (
 	errInsufficientBalanceForGas = errors.New("insufficient balance to pay for gas")
-	EvmErrHardForkHeight         int64
 )
 
 /*
@@ -226,104 +225,29 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 		vmerr error
 	)
 	if vmerr == nil {
-		if st.evm.BlockNumber.Int64() <= EvmErrHardForkHeight {
-			if contractCreation {
-				vmerr := txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-				if vmerr == nil {
-					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
-				} else {
-					st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				}
+		if contractCreation {
+			vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
+			if vmerr == nil {
+				ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 			} else {
-				// Increment the nonce for the next transaction
 				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				isBetTx, vmerr := txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-				if vmerr == nil && !isBetTx {
-					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
-				}
-			}
-		} else if txfilter.AppVersion < 4 {
-			if contractCreation {
-				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-				if vmerr == nil {
-					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
-				} else {
-					st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				}
-			} else {
-				// Increment the nonce for the next transaction
-				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				isBetTx := false
-				isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-				if vmerr == nil && !isBetTx {
-					ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
-				}
-			}
-		} else if txfilter.AppVersion < 6 {
-			if contractCreation {
-				vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-				if vmerr == nil {
-					ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
-				} else {
-					st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				}
-			} else {
-				// Increment the nonce for the next transaction
-				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				isBetTx := false
-				isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-				if vmerr == nil && !isBetTx {
-					if txfilter.IsAuthTx(*msg.To()) {
-						vmerr = txfilter.DoAuthHandle(msg.From(), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-					} else {
-						if txfilter.IsMintTx(*msg.To()) {
-							vmerr = txfilter.IsMintBlocked(msg.From())
-							if vmerr == nil {
-								st.state.AddBalance(msg.From(), msg.Value()) //mint the money for the bigguy
-							}
-						} else {
-							ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
-						}
-					}
-				}
 			}
 		} else {
-			if contractCreation {
-				vmerr = txfilter.IsFrozeBlocked(msg.From(), msg.To())
-				if vmerr == nil {
-					vmerr = txfilter.IsBetBlocked(msg.From(), nil, st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-					if vmerr == nil {
-						ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
-					} else {
-						st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-					}
+			// Increment the nonce for the next transaction
+			st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+			isBetTx := false
+			isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
+			if vmerr == nil && !isBetTx {
+				if txfilter.IsAuthTx(*msg.To()) {
+					vmerr = txfilter.DoAuthHandle(msg.From(), msg.Data(), st.evm.BlockNumber.Int64(), sim)
 				} else {
-					st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				}
-			} else {
-				// Increment the nonce for the next transaction
-				st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-				vmerr = txfilter.IsFrozeBlocked(msg.From(), msg.To())
-				if vmerr == nil {
-					isFrozeTx := false
-					isFrozeTx, vmerr = txfilter.DoFrozeHandle(msg.From(), *msg.To(), msg.Data(), st.evm.BlockNumber.Int64())
-					if vmerr == nil && !isFrozeTx {
-						isBetTx := false
-						isBetTx, vmerr = txfilter.DoBetHandle(msg.From(), msg.To(), st.state.GetBalance(msg.From()), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-						if vmerr == nil && !isBetTx {
-							if txfilter.IsAuthTx(*msg.To()) {
-								vmerr = txfilter.DoAuthHandle(msg.From(), msg.Data(), st.evm.BlockNumber.Int64(), sim)
-							} else {
-								if txfilter.IsMintTx(*msg.To()) {
-									vmerr = txfilter.IsMintBlocked(msg.From())
-									if vmerr == nil {
-										st.state.AddBalance(msg.From(), msg.Value()) //mint the money for the bigguy
-									}
-								} else {
-									ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
-								}
-							}
+					if txfilter.IsMintTx(*msg.To()) {
+						vmerr = txfilter.IsMintBlocked(msg.From())
+						if vmerr == nil {
+							st.state.AddBalance(msg.From(), msg.Value()) //mint the money for the bigguy
 						}
+					} else {
+						ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 					}
 				}
 			}
@@ -340,11 +264,7 @@ func (st *StateTransition) transitionDb(sim bool) (ret []byte, usedGas uint64, f
 		}
 	}
 	st.refundGas()
-	if txfilter.AppVersion >= 5 { //force collected to bigguy. The block proposers can be awarded through off-chain
-		st.state.AddBalance(txfilter.Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
-	} else {
-		st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
-	}
+	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	return ret, st.gasUsed(), vmerr != nil, err
 }
 

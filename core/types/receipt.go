@@ -317,7 +317,7 @@ func (r Receipts) DeriveFields(config *params.ChainConfig, hash common.Hash, num
 			from, _ := Sender(signer, txs[i])
 			r[i].ContractAddress = crypto.CreateAddress(from, txs[i].Nonce())
 		} else {
-			if txfilter.IsRelayTxFromClient(*txs[i].To()) && txfilter.AppVersion >= 4 {
+			if txfilter.IsRelayTxFromClient(*txs[i].To()) {
 				subTx, _ := DecodeTxFromHexBytes(txs[i].Data())
 				if subTx != nil {
 					if subTx.To() == nil {

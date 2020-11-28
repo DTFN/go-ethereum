@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 	"bytes"
-	"github.com/ethereum/go-ethereum/core/txfilter"
 	"encoding/hex"
 	"fmt"
 )
@@ -252,11 +251,6 @@ func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
 		amount:     tx.data.Amount,
 		data:       tx.data.Payload,
 		checkNonce: true,
-	}
-	if txfilter.AppVersion >= 4 { //wipe the transfer value to 0 except bigguy and admin. We are coin-free chain!
-		if !bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && !bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) {
-			msg.amount = big.NewInt(0)
-		}
 	}
 	return msg, nil
 }

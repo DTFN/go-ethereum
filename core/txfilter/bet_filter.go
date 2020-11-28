@@ -59,24 +59,8 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 		if to != nil && IsUnlockTx(*to) {
 			return posTable.CanRemovePosItem()
 		} else if to != nil && IsLockTx(*to) { //relock
-			currentSlots := int64(0)
-			if AppVersion < 4 {
-				tmpInt := big.NewInt(0)
-				currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
-			} else {
-				return fmt.Errorf("signer %X is already in PosTable. and it is after ppchain upgrade, no need to relock", from)
-				/*authItem, found := EthAuthTable.AuthItemMap[from]
-				if !found {
-					return fmt.Errorf("signer %X authItem not found in AuthTable", from)
-				}
-				if height < authItem.StartHeight {
-					return fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
-				}
-				if height > authItem.EndHeight {
-					return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
-				}
-				currentSlots = int64(10)*/
-			}
+			tmpInt := big.NewInt(0)
+			currentSlots := tmpInt.Div(balance, posTable.Threshold).Int64()
 			if posItem.Slots >= currentSlots {
 				return fmt.Errorf("signer %X already bonded at height %d ,balance has not increased", from, posItem.Height)
 			}
@@ -123,32 +107,28 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 			if to != nil && IsUnlockTx(*to) {
 				return fmt.Errorf("signer %X has not bonded ", from)
 			} else if to != nil && IsLockTx(*to) { //first lock
-				currentSlots := int64(0)
-				if AppVersion < 4 {
-					tmpInt := big.NewInt(0)
-					currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
-				} else {
-					authItem, found := authTable.AuthItemMap[from]
-					if !found {
-						return fmt.Errorf("signer %X authItem not found in AuthTable", from)
-					}
-					if height < authItem.StartHeight {
-						return fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
-					}
-					if height > authItem.EndHeight {
-						return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
-					}
-					if tmHash := crypto.Keccak256(txDataBytes); !bytes.Equal(tmHash, authItem.ApprovedTxDataHash) {
-						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
-						return fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
-					}
-					currentSlots = int64(10)
+				tmpInt := big.NewInt(0)
+				currentSlots := tmpInt.Div(balance, posTable.Threshold).Int64()
+
+				if currentSlots < 1 {
+					fmt.Printf("sender %X doesn't have one slot of money", from)
+					return fmt.Errorf("sender %X doesn't have one slot of money", from)
 				}
-				if 1 > currentSlots {
-					fmt.Println(currentSlots)
-					fmt.Printf("signer %X doesn't have one slot of money", from)
-					return fmt.Errorf("signer %X doesn't have one slot of money", from)
+				authItem, found := authTable.AuthItemMap[from]
+				if !found {
+					return fmt.Errorf("signer %X authItem not found in AuthTable", from)
 				}
+				if height < authItem.StartHeight {
+					return fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
+				}
+				if height > authItem.EndHeight {
+					return fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
+				}
+				if tmHash := crypto.Keccak256(txDataBytes); !bytes.Equal(tmHash, authItem.ApprovedTxDataHash) {
+					fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
+					return fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
+				}
+
 				txData, err := UnMarshalTxData(txDataBytes)
 				if err != nil {
 					return err
@@ -164,9 +144,8 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 				if len(tmAddress) == 0 {
 					return fmt.Errorf("len(tmAddress)==0, wrong pubKey? %v", txData.PubKey)
 				}
-				storedTMAddr, found := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
-				if found && storedTMAddr != tmAddress {
-					return fmt.Errorf("signer %X tmData addr %X not match with authed addr %X", from, tmAddress, storedTMAddr)
+				if authItem.TmAddress != tmAddress {
+					return fmt.Errorf("signer %X tmData addr %X not match with authed addr %X", from, tmAddress, authItem.TmAddress)
 				}
 				signer, exist := posTable.TmAddressToSignerMap[tmAddress]
 				if exist {
@@ -208,14 +187,9 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 		if to != nil && IsUnlockTx(*to) {
 			return true, posTable.RemovePosItem(from, height, false)
 		} else if to != nil && IsLockTx(*to) { //relock
-			currentSlots := int64(0)
-			if AppVersion < 4 {
-				tmpInt := big.NewInt(0)
-				currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
-			} else {
-				return true, fmt.Errorf("signer %X is already in PosTable. and it is after ppchain upgrade, no need to relock", from)
-				//currentSlots = int64(10)
-			}
+			tmpInt := big.NewInt(0)
+			currentSlots := tmpInt.Div(balance, posTable.Threshold).Int64()
+
 			if posItem.Slots >= currentSlots {
 				fmt.Printf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
 				return true, fmt.Errorf("signer %X already bonded at height %d , balance has not increased", from, posItem.Height)
@@ -294,37 +268,31 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 					fmt.Printf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
-				currentSlots := int64(0)
-				if AppVersion < 4 {
-					tmpInt := big.NewInt(0)
-					currentSlots = tmpInt.Div(balance, posTable.Threshold).Int64()
-				} else {
-					authItem, found := authTable.AuthItemMap[from]
-					if !found {
-						return true, fmt.Errorf("signer %X authItem not found in AuthTable", from)
-					}
-					if height < authItem.StartHeight {
-						return true, fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
-					}
-					if height > authItem.EndHeight {
-						return true, fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
-					}
-					if tmHash := crypto.Keccak256(txDataBytes); !bytes.Equal(tmHash, authItem.ApprovedTxDataHash) {
-						fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
-						return true, fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
-					}
-					storedTMAddr, found := authTable.ExtendAuthTable.SignerToTmAddressMap[from]
-					if found && storedTMAddr != tmAddress {
-						return true, fmt.Errorf("signer %X tmData addr %X not match with authed addr %X", from, tmAddress, storedTMAddr)
-					}
-					currentSlots = int64(10)
-					authTable.DeleteAuthItem(from)
-				}
-				if 1 > currentSlots {
-					fmt.Println(currentSlots)
+				tmpInt := big.NewInt(0)
+				currentSlots := tmpInt.Div(balance, posTable.Threshold).Int64()
+				if currentSlots < 1 {
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
 				}
+				authItem, found := authTable.AuthItemMap[from]
+				if !found {
+					return true, fmt.Errorf("signer %X authItem not found in AuthTable", from)
+				}
+				if height < authItem.StartHeight {
+					return true, fmt.Errorf("signer %X too early to join PosTable, current height %v, authItem startHeight %v ", from, height, authItem.StartHeight)
+				}
+				if height > authItem.EndHeight {
+					return true, fmt.Errorf("signer %X too late to join PosTable, current height %v, authItem endHeight %v, expired ", from, height, authItem.EndHeight)
+				}
+				if tmHash := crypto.Keccak256(txDataBytes); !bytes.Equal(tmHash, authItem.ApprovedTxDataHash) {
+					fmt.Printf("signer %X tmData hash %X not match with authed hash %X \n", from, tmHash, authItem.ApprovedTxDataHash)
+					return true, fmt.Errorf("signer %X tmData hash %X not match with authed hash %X", from, tmHash, authItem.ApprovedTxDataHash)
+				}
+				if authItem.TmAddress != tmAddress {
+					return true, fmt.Errorf("signer %X tmData addr %X not match with authed addr %X", from, tmAddress, authItem.TmAddress)
+				}
+
+				authTable.DeleteAuthItem(from)
 				return true, posTable.InsertPosItem(from, NewPosItem(height, currentSlots, txData.PubKey, tmAddress, txData.BlsKeyString, common.HexToAddress(txData.Beneficiary))) //this should succeed, otherwise authItem has to rollback
 			}
 		}
