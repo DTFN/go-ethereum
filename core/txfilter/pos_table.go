@@ -11,8 +11,6 @@ import (
 	"strings"
 )
 
-// it means the lowest bond balance must equal or larger than the 1/1000 of totalBalance
-const ThresholdUnit = 1000
 const UnbondWaitEpochs = 3
 const EpochBlocks = int64(200)
 
