@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	ethereum "github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -342,7 +342,7 @@ func (es *EventSystem) handleRemovedLogs(filters filterIndex, ev core.RemovedLog
 }
 
 func (es *EventSystem) handleTxsEvent(filters filterIndex, ev core.TxPreEvent) {
-	hashes := make([]common.Hash, 0, 1) //len(ev.Txs)
+	hashes := make([]common.Hash, 0, 1)
 	hashes = append(hashes, ev.Tx.Hash())
 	for _, f := range filters[PendingTransactionsSubscription] {
 		f.hashes <- hashes

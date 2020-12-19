@@ -35,7 +35,7 @@ type lesTxRelay struct {
 	txPending    map[common.Hash]struct{}
 	peerList     []*serverPeer
 	peerStartPos int
-	lock         sync.RWMutex
+	lock         sync.Mutex
 	stop         chan struct{}
 
 	retriever *retrieveManager
@@ -144,7 +144,7 @@ func (ltrx *lesTxRelay) send(txs types.Transactions, count int) {
 				peer := dp.(*serverPeer)
 				cost := peer.getTxRelayCost(len(ll), len(enc))
 				peer.fcServer.QueuedRequest(reqID, cost)
-				return func() { peer.sendTxs(reqID, enc) }
+				return func() { peer.sendTxs(reqID, len(ll), enc) }
 			},
 		}
 		go ltrx.retriever.retrieve(context.Background(), reqID, rq, func(p distPeer, msg *Msg) error { return nil }, ltrx.stop)

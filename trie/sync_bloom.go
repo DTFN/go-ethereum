@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -41,8 +42,8 @@ var (
 )
 
 // syncBloomHasher is a wrapper around a byte blob to satisfy the interface API
-// requirements of the bloom library used. It's used to convert a trie hash into
-// a 64 bit mini hash.
+// requirements of the bloom library used. It's used to convert a trie hash or
+// contract code hash into a 64 bit mini hash.
 type syncBloomHasher []byte
 
 func (f syncBloomHasher) Write(p []byte) (n int, err error) { panic("not implemented") }
@@ -53,9 +54,9 @@ func (f syncBloomHasher) Size() int                         { return 8 }
 func (f syncBloomHasher) Sum64() uint64                     { return binary.BigEndian.Uint64(f) }
 
 // SyncBloom is a bloom filter used during fast sync to quickly decide if a trie
-// node already exists on disk or not. It self populates from the provided disk
-// database on creation in a background thread and will only start returning live
-// results once that's finished.
+// node or contract code already exists on disk or not. It self populates from the
+// provided disk database on creation in a background thread and will only start
+// returning live results once that's finished.
 type SyncBloom struct {
 	bloom  *bloomfilter.Filter
 	inited uint32
@@ -99,7 +100,7 @@ func (b *SyncBloom) init(database ethdb.Iteratee) {
 	// Note, this is fine, because everything inserted into leveldb by fast sync is
 	// also pushed into the bloom directly, so we're not missing anything when the
 	// iterator is swapped out for a new one.
-	it := database.NewIterator()
+	it := database.NewIterator(nil, nil)
 
 	var (
 		start = time.Now()
@@ -107,8 +108,14 @@ func (b *SyncBloom) init(database ethdb.Iteratee) {
 	)
 	for it.Next() && atomic.LoadUint32(&b.closed) == 0 {
 		// If the database entry is a trie node, add it to the bloom
-		if key := it.Key(); len(key) == common.HashLength {
+		key := it.Key()
+		if len(key) == common.HashLength {
 			b.bloom.Add(syncBloomHasher(key))
+			bloomLoadMeter.Mark(1)
+		}
+		// If the database entry is a contract code, add it to the bloom
+		if ok, hash := rawdb.IsCodeKey(key); ok {
+			b.bloom.Add(syncBloomHasher(hash))
 			bloomLoadMeter.Mark(1)
 		}
 		// If enough time elapsed since the last iterator swap, restart
@@ -116,16 +123,16 @@ func (b *SyncBloom) init(database ethdb.Iteratee) {
 			key := common.CopyBytes(it.Key())
 
 			it.Release()
-			it = database.NewIteratorWithStart(key)
+			it = database.NewIterator(nil, key)
 
-			log.Info("Initializing fast sync bloom", "items", b.bloom.N(), "errorrate", b.errorRate(), "elapsed", common.PrettyDuration(time.Since(start)))
+			log.Info("Initializing state bloom", "items", b.bloom.N(), "errorrate", b.errorRate(), "elapsed", common.PrettyDuration(time.Since(start)))
 			swap = time.Now()
 		}
 	}
 	it.Release()
 
 	// Mark the bloom filter inited and return
-	log.Info("Initialized fast sync bloom", "items", b.bloom.N(), "errorrate", b.errorRate(), "elapsed", common.PrettyDuration(time.Since(start)))
+	log.Info("Initialized state bloom", "items", b.bloom.N(), "errorrate", b.errorRate(), "elapsed", common.PrettyDuration(time.Since(start)))
 	atomic.StoreUint32(&b.inited, 1)
 }
 
@@ -155,7 +162,7 @@ func (b *SyncBloom) Close() error {
 		b.pend.Wait()
 
 		// Wipe the bloom, but mark it "uninited" just in case someone attempts an access
-		log.Info("Deallocated fast sync bloom", "items", b.bloom.N(), "errorrate", b.errorRate())
+		log.Info("Deallocated state bloom", "items", b.bloom.N(), "errorrate", b.errorRate())
 
 		atomic.StoreUint32(&b.inited, 0)
 		b.bloom = nil

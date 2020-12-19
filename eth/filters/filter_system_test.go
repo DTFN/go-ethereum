@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	ethereum "github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -101,7 +101,7 @@ func (b *testBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*types
 	return logs, nil
 }
 
-func (b *testBackend) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
+func (b *testBackend) SubscribeTxPreEvent(ch chan<- core.TxPreEvent) event.Subscription {
 	return b.txFeed.Subscribe(ch)
 }
 
@@ -217,13 +217,7 @@ func TestPendingTxFilter(t *testing.T) {
 		backend = &testBackend{db: db}
 		api     = NewPublicFilterAPI(backend, false)
 
-		transactions = []*types.Transaction{
-			types.NewTransaction(0, common.HexToAddress("0xb794f5ea0ba39494ce83a213fffba74279579268"), new(big.Int), 0, new(big.Int), nil),
-			types.NewTransaction(1, common.HexToAddress("0xb794f5ea0ba39494ce83a213fffba74279579268"), new(big.Int), 0, new(big.Int), nil),
-			types.NewTransaction(2, common.HexToAddress("0xb794f5ea0ba39494ce83a213fffba74279579268"), new(big.Int), 0, new(big.Int), nil),
-			types.NewTransaction(3, common.HexToAddress("0xb794f5ea0ba39494ce83a213fffba74279579268"), new(big.Int), 0, new(big.Int), nil),
-			types.NewTransaction(4, common.HexToAddress("0xb794f5ea0ba39494ce83a213fffba74279579268"), new(big.Int), 0, new(big.Int), nil),
-		}
+		tx = types.NewTransaction(0, common.HexToAddress("0xb794f5ea0ba39494ce83a213fffba74279579268"), new(big.Int), 0, new(big.Int), nil)
 
 		hashes []common.Hash
 	)
@@ -231,7 +225,7 @@ func TestPendingTxFilter(t *testing.T) {
 	fid0 := api.NewPendingTransactionFilter()
 
 	time.Sleep(1 * time.Second)
-	backend.txFeed.Send(core.NewTxsEvent{Txs: transactions})
+	backend.txFeed.Send(core.TxPreEvent{Tx: tx})
 
 	timeout := time.Now().Add(1 * time.Second)
 	for {
@@ -242,7 +236,7 @@ func TestPendingTxFilter(t *testing.T) {
 
 		h := results.([]common.Hash)
 		hashes = append(hashes, h...)
-		if len(hashes) >= len(transactions) {
+		if len(hashes) >= 1 {
 			break
 		}
 		// check timeout
@@ -253,13 +247,13 @@ func TestPendingTxFilter(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if len(hashes) != len(transactions) {
-		t.Errorf("invalid number of transactions, want %d transactions(s), got %d", len(transactions), len(hashes))
+	if len(hashes) != 1 {
+		t.Errorf("invalid number of transactions, want %d transactions(s), got %d", 1, len(hashes))
 		return
 	}
 	for i := range hashes {
-		if hashes[i] != transactions[i].Hash() {
-			t.Errorf("hashes[%d] invalid, want %x, got %x", i, transactions[i].Hash(), hashes[i])
+		if hashes[i] != tx.Hash() {
+			t.Errorf("hashes[%d] invalid, want %x, got %x", i, tx.Hash(), hashes[i])
 		}
 	}
 }
