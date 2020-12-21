@@ -212,6 +212,7 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64, sla
 	if posItem, ok := posTable.PosItemMap[signer]; ok {
 		posTable.ChangedFlagThisBlock = true
 		posItem.Height = height
+		posTable.TotalSlots -= posItem.Slots
 		if slash {
 			posItem.Slots = 0
 		}
@@ -227,7 +228,6 @@ func (posTable *PosTable) RemovePosItem(signer common.Address, height int64, sla
 		delete(posTable.PosItemMap, signer)
 		posTable.SortedPosItems.remove(posTable.PosItemIndexMap[signer].index)
 		delete(posTable.PosItemIndexMap, signer)
-		posTable.TotalSlots -= posItem.Slots
 		fmt.Printf("signer %X remove at height %v SUCCESS", signer, height)
 		return nil
 	} else {
