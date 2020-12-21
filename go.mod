@@ -3,7 +3,7 @@ module github.com/ethereum/go-ethereum
 go 1.13
 
 require (
-	bazil.org/fuse v0.0.0-20200430160008-602fc2ff4a00
+	bazil.org/fuse v0.0.0-20200430160008-602fc2ff4a00 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
 	github.com/Azure/azure-storage-blob-go v0.7.0
 	github.com/Azure/go-autorest/autorest/adal v0.8.0 // indirect
@@ -55,6 +55,7 @@ require (
 	github.com/rjeczalik/notify v0.9.1
 	github.com/rs/cors v1.7.0
 	github.com/rs/xhandler v0.0.0-20160618193221-ed27b6fd6521 // indirect
+	github.com/shirou/gopsutil v3.20.11+incompatible
 	github.com/spaolacci/murmur3 v1.0.1-0.20190317074736-539464a789e9
 	github.com/status-im/keycard-go v0.0.0-20190316090335-8537d3370df4
 	github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570
@@ -70,7 +71,7 @@ require (
 	golang.org/x/sys v0.0.0-20200302150141-5c8b2ff67527
 	golang.org/x/text v0.3.2
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
+	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/fatih/set.v0 v0.2.1
 	gopkg.in/karalabe/cookiejar.v2 v2.0.0-20150724131613-8dcd6a7f4951
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
