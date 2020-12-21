@@ -75,7 +75,7 @@ type Backend interface {
 	GetPoolNonce(ctx context.Context, addr common.Address) (uint64, error)
 	Stats() (pending int, queued int)
 	TxPoolContent() (map[common.Address]types.Transactions, map[common.Address]types.Transactions)
-	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+	SubscribeTxPreEvent(chan<- core.TxPreEvent) event.Subscription
 
 	// Filter API
 	BloomStatus() (uint64, uint64)
