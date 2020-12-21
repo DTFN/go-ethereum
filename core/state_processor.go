@@ -152,7 +152,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	return applyTransactionMessage(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, nil)
 }
 
-func ApplyTransactionWithInfo(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, txInfo types.TxInfo, usedGas *uint64,  cfg vm.Config) (*types.Receipt, error) {
+func ApplyTransactionWithInfo(config *params.ChainConfig, bc *BlockChain, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, txInfo types.TxInfo, usedGas *uint64, cfg vm.Config) (*types.Receipt, types.Message, error) {
 	var msg types.Message
 	if txInfo.SubTx == nil {
 		msg, _ = tx.AsMessageWithFrom(txInfo.From)
@@ -162,5 +162,6 @@ func ApplyTransactionWithInfo(config *params.ChainConfig, bc *BlockChain, author
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
-	return applyTransactionMessage(msg, config, bc, author, gp, statedb, header, tx,  usedGas, vmenv, &txInfo)
+	result, err := applyTransactionMessage(msg, config, bc, author, gp, statedb, header, tx, usedGas, vmenv, &txInfo)
+	return result, msg, err
 }
