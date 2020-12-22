@@ -1605,6 +1605,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	if err != nil {
 		return NonStatTy, err
 	}
+	fmt.Printf("writeBlockwithState: %X \n", root)
 	triedb := bc.stateCache.TrieDB()
 
 	// If we're running an archive node, always flush
