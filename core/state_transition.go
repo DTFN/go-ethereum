@@ -261,7 +261,8 @@ func (st *StateTransition) transitionDb(sim bool) (*ExecutionResult, error) {
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
 	homestead := st.evm.ChainConfig().IsHomestead(st.evm.Context.BlockNumber)
-	istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.Context.BlockNumber)
+	//istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.Context.BlockNumber)
+	istanbul := false //for compatible with product data
 	contractCreation := msg.To() == nil
 
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
@@ -361,8 +362,11 @@ func (st *StateTransition) transitionDb(sim bool) (*ExecutionResult, error) {
 		}
 	}
 	st.refundGas()
-	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
-
+	if txfilter.AppVersion >= 5 { //force collected to bigguy. The block proposers can be awarded through off-chain
+		st.state.AddBalance(txfilter.Bigguy, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	} else {
+		st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	}
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),
 		Err:        vmerr,
