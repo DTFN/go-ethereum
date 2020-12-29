@@ -397,7 +397,6 @@ const (
 	ModeTest
 	ModeFake
 	ModeFullFake
-	ModeNil
 )
 
 // Config are the configuration parameters of the ethash.
@@ -534,15 +533,6 @@ func NewFullFaker() *Ethash {
 // in the same process.
 func NewShared() *Ethash {
 	return &Ethash{shared: sharedEthash}
-}
-
-// NewNil creates a fake ethash PoW indicate miner to stop immediately
-func NewNil() *Ethash {
-	return &Ethash{
-		config: Config{
-			PowMode: ModeNil,
-		},
-	}
 }
 
 // Close closes the exit channel to notify all backend threads exiting.

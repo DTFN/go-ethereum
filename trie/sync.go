@@ -351,7 +351,7 @@ func (s *Sync) schedule(req *request) {
 	// ok the worst case is the second response will be treated as duplicated.
 	prio := int64(len(req.path)) << 56 // depth >= 128 will never happen, storage leaves will be included in their parents
 	for i := 0; i < 14 && i < len(req.path); i++ {
-		prio |= int64(15-req.path[i]) << uint64(52 - i*4) // 15-nibble => lexicographic order
+		prio |= int64(15-req.path[i]) << (52 - i*4) // 15-nibble => lexicographic order
 	}
 	s.queue.Push(req.hash, prio)
 }

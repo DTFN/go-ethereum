@@ -1015,9 +1015,11 @@ func BenchmarkBinaryAccountIteration(b *testing.B) {
 		return snap.(*diffLayer).newBinaryAccountIterator()
 	})
 }
+
 func BenchmarkFastAccountIteration(b *testing.B) {
 	benchmarkAccountIteration(b, newFastAccountIterator)
 }
+
 func benchmarkAccountIteration(b *testing.B, iterator func(snap snapshot) AccountIterator) {
 	// Create a diff stack and randomize the accounts across them
 	layers := make([]map[common.Hash][]byte, 128)
@@ -1034,8 +1036,10 @@ func benchmarkAccountIteration(b *testing.B, iterator func(snap snapshot) Accoun
 	}
 	// Reset the timers and report all the stats
 	it := iterator(stack)
+
 	b.ResetTimer()
 	b.ReportAllocs()
+
 	for it.Next() {
 	}
 }

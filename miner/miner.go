@@ -62,7 +62,6 @@ type Miner struct {
 	exitCh   chan struct{}
 	startCh  chan common.Address
 	stopCh   chan struct{}
-	canStart bool
 }
 
 func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine, isLocalBlock func(block *types.Block) bool) *Miner {
@@ -80,13 +79,6 @@ func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *even
 	return miner
 }
 
-func NewFake() *Miner {
-	miner := &Miner{
-		worker:   &worker{},
-		canStart: false,
-	}
-	return miner
-}
 // update keeps track of the downloader events. Please be aware that this is a one shot type of update loop.
 // It's entered once and as soon as `Done` or `Failed` has been broadcasted the events are unregistered and
 // the loop is exited. This to prevent a major security vuln where external parties can DOS you with blocks
@@ -152,9 +144,7 @@ func (miner *Miner) update() {
 }
 
 func (miner *Miner) Start(coinbase common.Address) {
-	if miner.canStart{
-		miner.startCh <- coinbase
-	}
+	miner.startCh <- coinbase
 }
 
 func (miner *Miner) Stop() {
