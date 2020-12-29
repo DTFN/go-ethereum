@@ -21,6 +21,15 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
+// TxPreEvent is posted when a transaction enters the transaction pool.
+type TxPreEvent struct {
+	Tx      *types.Transaction
+	From    common.Address
+	Relayer common.Address
+	SubTx   *types.Transaction  //not empty if it is a relayer tx
+	Result  chan error
+}
+
 // NewTxsEvent is posted when a batch of transactions enter the transaction pool.
 type NewTxsEvent struct{ Txs []*types.Transaction }
 

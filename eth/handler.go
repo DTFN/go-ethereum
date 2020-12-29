@@ -81,7 +81,7 @@ type ProtocolManager struct {
 	peers        *peerSet
 
 	eventMux      *event.TypeMux
-	txsCh         chan core.NewTxsEvent
+	txsCh         chan core.TxPreEvent
 	txsSub        event.Subscription
 	minedBlockSub *event.TypeMuxSubscription
 
@@ -255,8 +255,8 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 
 	// broadcast transactions
 	pm.wg.Add(1)
-	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
-	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
+	pm.txsCh = make(chan core.TxPreEvent, txChanSize)
+	pm.txsSub = pm.txpool.SubscribeTxPreEvent(pm.txsCh)
 	go pm.txBroadcastLoop()
 
 	// broadcast mined blocks
@@ -905,19 +905,20 @@ func (pm *ProtocolManager) minedBroadcastLoop() {
 
 // txBroadcastLoop announces new transactions to connected peers.
 func (pm *ProtocolManager) txBroadcastLoop() {
-	defer pm.wg.Done()
-
 	for {
 		select {
 		case event := <-pm.txsCh:
 			// For testing purpose only, disable propagation
+			txs := make([]*types.Transaction, 0)
+			txs = append(txs, event.Tx)
 			if pm.broadcastTxAnnouncesOnly {
-				pm.BroadcastTransactions(event.Txs, false)
+				pm.BroadcastTransactions(types.Transactions(txs), false)
 				continue
 			}
-			pm.BroadcastTransactions(event.Txs, true)  // First propagate transactions to peers
-			pm.BroadcastTransactions(event.Txs, false) // Only then announce to the rest
+			pm.BroadcastTransactions(types.Transactions(txs), true)  // First propagate transactions to peers
+			pm.BroadcastTransactions(types.Transactions(txs), false) // Only then announce to the rest
 
+			// Err() channel will be closed when unsubscribing.
 		case <-pm.txsSub.Err():
 			return
 		}
