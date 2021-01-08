@@ -191,7 +191,7 @@ func (s *StateDB) Reset(root common.Hash) error {
 
 func (s *StateDB) AddLog(log *types.Log) {
 	s.journal.append(addLogChange{txhash: s.thash})
-
+	fmt.Printf("---event: %v \n", log)
 	log.TxHash = s.thash
 	log.BlockHash = s.bhash
 	log.TxIndex = uint(s.txIndex)
