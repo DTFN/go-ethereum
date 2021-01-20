@@ -860,7 +860,6 @@ func opReturn(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memor
 	ret := memory.GetPtr(offset.Int64(), size.Int64())
 
 	interpreter.intPool.put(offset, size)
-	fmt.Printf("---opRevert: %v \n", ret)
 	return ret, nil
 }
 
@@ -869,6 +868,7 @@ func opRevert(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memor
 	ret := memory.GetPtr(offset.Int64(), size.Int64())
 
 	interpreter.intPool.put(offset, size)
+	fmt.Printf("---opRevert: %v \n", ret)
 	return ret, nil
 }
 
