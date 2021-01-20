@@ -26,15 +26,31 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64, sim bo
 	var authTable *AuthTable
 	var posTable *PosTable
 	if sim {
+		if EthAuthTableCopy == nil {
+			return ErrAuthTableNotCreate
+		}
+		if CurrentPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !CurrentPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTableCopy
 		posTable = CurrentPosTable
 	} else {
+		if EthAuthTable == nil {
+			return ErrAuthTableNotCreate
+		}
+		if NextPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !NextPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTable
 		posTable = NextPosTable
 	}
-	if authTable == nil {
-		return ErrAuthTableNotCreate
-	}
+
 	if !bytes.Equal(from.Bytes(), PPChainAdmin.Bytes()) {
 		fmt.Printf("not admin %X sent an auth tx \n", from)
 		return fmt.Errorf("not admin %X sent an auth tx \n", from)
@@ -88,15 +104,31 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 	var authTable *AuthTable
 	var posTable *PosTable
 	if sim {
+		if EthAuthTableCopy == nil {
+			return ErrAuthTableNotCreate
+		}
+		if CurrentPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !CurrentPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTableCopy.Copy()
 		posTable = CurrentPosTable.Copy()
 	} else {
+		if EthAuthTable == nil {
+			return ErrAuthTableNotCreate
+		}
+		if NextPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !NextPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTable
 		posTable = NextPosTable
 	}
-	if authTable == nil {
-		return ErrAuthTableNotCreate
-	}
+
 	if !bytes.Equal(from.Bytes(), PPChainAdmin.Bytes()) {
 		fmt.Printf("not admin %X sent an auth tx \n", from)
 		return fmt.Errorf("not admin %X sent an auth tx \n", from)

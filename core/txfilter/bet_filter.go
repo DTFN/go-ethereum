@@ -42,17 +42,29 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 	var authTable *AuthTable
 	var posTable *PosTable
 	if sim {
+		if EthAuthTableCopy == nil {
+			return ErrAuthTableNotCreate
+		}
+		if CurrentPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !CurrentPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTableCopy
 		posTable = CurrentPosTable
 	} else {
+		if EthAuthTable == nil {
+			return ErrAuthTableNotCreate
+		}
+		if NextPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !NextPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTable
 		posTable = NextPosTable
-	}
-	if posTable == nil {
-		return ErrPosTableNotCreate
-	}
-	if !posTable.InitFlag {
-		return ErrPosTableNotInit
 	}
 	posItem, exist := posTable.PosItemMap[from]
 	if exist {
@@ -170,18 +182,31 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 	var authTable *AuthTable
 	var posTable *PosTable
 	if sim {
+		if EthAuthTableCopy == nil {
+			return false, ErrAuthTableNotCreate
+		}
+		if CurrentPosTable == nil {
+			return false, ErrPosTableNotCreate
+		}
+		if !CurrentPosTable.InitFlag {
+			return false, ErrPosTableNotInit
+		}
 		authTable = EthAuthTableCopy.Copy()
 		posTable = CurrentPosTable.Copy()
 	} else {
+		if EthAuthTable == nil {
+			return false, ErrAuthTableNotCreate
+		}
+		if NextPosTable == nil {
+			return false, ErrPosTableNotCreate
+		}
+		if !NextPosTable.InitFlag {
+			return false, ErrPosTableNotInit
+		}
 		authTable = EthAuthTable
 		posTable = NextPosTable
 	}
-	if posTable == nil {
-		return false, ErrPosTableNotCreate
-	}
-	if !posTable.InitFlag {
-		return false, ErrPosTableNotInit
-	}
+
 	posItem, exist := posTable.PosItemMap[from]
 	if exist {
 		if to != nil && IsUnlockTx(*to) {
