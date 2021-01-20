@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"golang.org/x/crypto/sha3"
+	"fmt"
 )
 
 var (
@@ -859,6 +860,7 @@ func opReturn(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memor
 	ret := memory.GetPtr(offset.Int64(), size.Int64())
 
 	interpreter.intPool.put(offset, size)
+	fmt.Printf("---opRevert: %v \n", ret)
 	return ret, nil
 }
 
@@ -889,11 +891,14 @@ func makeLog(size int) executionFunc {
 	return func(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 		topics := make([]common.Hash, size)
 		mStart, mSize := stack.pop(), stack.pop()
+		printTopics := "---event: "
 		for i := 0; i < size; i++ {
 			topics[i] = common.BigToHash(stack.pop())
+			printTopics += fmt.Sprintf("%v %v|", i, topics[i])
 		}
 
 		d := memory.GetCopy(mStart.Int64(), mSize.Int64())
+		fmt.Printf("%v data: %v \n", printTopics, d)
 		interpreter.evm.StateDB.AddLog(&types.Log{
 			Address: contract.Address(),
 			Topics:  topics,
