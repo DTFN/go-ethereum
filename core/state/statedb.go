@@ -498,6 +498,7 @@ func (s *StateDB) deleteStateObject(obj *stateObject) {
 	if metrics.EnabledExpensive {
 		defer func(start time.Time) { s.AccountUpdates += time.Since(start) }(time.Now())
 	}
+	obj.deleted = true
 	// Delete the account from the trie
 	addr := obj.Address()
 	if err := s.trie.TryDelete(addr[:]); err != nil {
