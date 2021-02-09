@@ -20,7 +20,6 @@ package miner
 import (
 	"fmt"
 	"math/big"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -61,19 +60,20 @@ type Miner struct {
 	eth      Backend
 	engine   consensus.Engine
 	exitCh   chan struct{}
-
-	canStart    int32 // can start indicates whether we can start the mining operation
-	shouldStart int32 // should start indicates whether we should start after sync
+	startCh  chan common.Address
+	stopCh   chan struct{}
+	canStart bool
 }
 
 func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine, isLocalBlock func(block *types.Block) bool) *Miner {
 	miner := &Miner{
-		eth:      eth,
-		mux:      mux,
-		engine:   engine,
-		exitCh:   make(chan struct{}),
-		worker:   newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, true),
-		canStart: 1,
+		eth:     eth,
+		mux:     mux,
+		engine:  engine,
+		exitCh:  make(chan struct{}),
+		startCh: make(chan common.Address),
+		stopCh:  make(chan struct{}),
+		worker:  newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, true),
 	}
 	go miner.update()
 
@@ -83,7 +83,7 @@ func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *even
 func NewFake() *Miner {
 	miner := &Miner{
 		worker:   &worker{},
-		canStart: 0,
+		canStart: false,
 	}
 	return miner
 }
@@ -93,57 +93,77 @@ func NewFake() *Miner {
 // and halt your mining operation for as long as the DOS continues.
 func (miner *Miner) update() {
 	events := miner.mux.Subscribe(downloader.StartEvent{}, downloader.DoneEvent{}, downloader.FailedEvent{})
-	defer events.Unsubscribe()
+	defer func() {
+		if !events.Closed() {
+			events.Unsubscribe()
+		}
+	}()
 
+	shouldStart := false
+	canStart := true
+	dlEventCh := events.Chan()
 	for {
 		select {
-		case ev := <-events.Chan():
+		case ev := <-dlEventCh:
 			if ev == nil {
-				return
+				// Unsubscription done, stop listening
+				dlEventCh = nil
+				continue
 			}
 			switch ev.Data.(type) {
 			case downloader.StartEvent:
-				atomic.StoreInt32(&miner.canStart, 0)
-				if miner.Mining() {
-					miner.Stop()
-					atomic.StoreInt32(&miner.shouldStart, 1)
+				wasMining := miner.Mining()
+				miner.worker.stop()
+				canStart = false
+				if wasMining {
+					// Resume mining after sync was finished
+					shouldStart = true
 					log.Info("Mining aborted due to sync")
 				}
-			case downloader.DoneEvent, downloader.FailedEvent:
-				shouldStart := atomic.LoadInt32(&miner.shouldStart) == 1
-
-				atomic.StoreInt32(&miner.canStart, 1)
-				atomic.StoreInt32(&miner.shouldStart, 0)
+			case downloader.FailedEvent:
+				canStart = true
 				if shouldStart {
-					miner.Start(miner.coinbase)
+					miner.SetEtherbase(miner.coinbase)
+					miner.worker.start()
 				}
-				// stop immediately and ignore all further pending events
-				return
+			case downloader.DoneEvent:
+				canStart = true
+				if shouldStart {
+					miner.SetEtherbase(miner.coinbase)
+					miner.worker.start()
+				}
+				// Stop reacting to downloader events
+				events.Unsubscribe()
 			}
+		case addr := <-miner.startCh:
+			miner.SetEtherbase(addr)
+			if canStart {
+				miner.worker.start()
+			}
+			shouldStart = true
+		case <-miner.stopCh:
+			shouldStart = false
+			miner.worker.stop()
 		case <-miner.exitCh:
+			miner.worker.close()
 			return
 		}
 	}
 }
 
 func (miner *Miner) Start(coinbase common.Address) {
-	atomic.StoreInt32(&miner.shouldStart, 1)
-	miner.SetEtherbase(coinbase)
-
-	if atomic.LoadInt32(&miner.canStart) == 0 {
-		log.Info("Network syncing, will start miner afterwards")
-		return
+	if miner.canStart{
+		miner.startCh <- coinbase
 	}
-	miner.worker.start()
 }
 
 func (miner *Miner) Stop() {
-	miner.worker.stop()
-	atomic.StoreInt32(&miner.shouldStart, 0)
+	if miner.canStart{
+		miner.stopCh <- struct{}{}
+	}
 }
 
 func (miner *Miner) Close() {
-	miner.worker.close()
 	close(miner.exitCh)
 }
 
@@ -190,8 +210,25 @@ func (miner *Miner) SetEtherbase(addr common.Address) {
 	miner.worker.setEtherbase(addr)
 }
 
+// EnablePreseal turns on the preseal mining feature. It's enabled by default.
+// Note this function shouldn't be exposed to API, it's unnecessary for users
+// (miners) to actually know the underlying detail. It's only for outside project
+// which uses this library.
+func (miner *Miner) EnablePreseal() {
+	miner.worker.enablePreseal()
+}
+
+// DisablePreseal turns off the preseal mining feature. It's necessary for some
+// fake consensus engine which can seal blocks instantaneously.
+// Note this function shouldn't be exposed to API, it's unnecessary for users
+// (miners) to actually know the underlying detail. It's only for outside project
+// which uses this library.
+func (miner *Miner) DisablePreseal() {
+	miner.worker.disablePreseal()
+}
+
 // SubscribePendingLogs starts delivering logs from pending transactions
 // to the given channel.
-func (self *Miner) SubscribePendingLogs(ch chan<- []*types.Log) event.Subscription {
-	return self.worker.pendingLogsFeed.Subscribe(ch)
+func (miner *Miner) SubscribePendingLogs(ch chan<- []*types.Log) event.Subscription {
+	return miner.worker.pendingLogsFeed.Subscribe(ch)
 }

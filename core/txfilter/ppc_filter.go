@@ -26,17 +26,32 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64, sim bo
 	var authTable *AuthTable
 	var posTable *PosTable
 	if sim {
+		if EthAuthTableCopy == nil {
+			return ErrAuthTableNotCreate
+		}
+		if CurrentPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !CurrentPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTableCopy
 		posTable = CurrentPosTable
 	} else {
+		if EthAuthTable == nil {
+			return ErrAuthTableNotCreate
+		}
+		if NextPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !NextPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTable
 		posTable = NextPosTable
 	}
-	if authTable == nil {
-		return ErrAuthTableNotCreate
-	}
 	if AppVersion < 4 {
-		fmt.Printf("version<4,not support auth tx sent by %X\n",from)
+		fmt.Printf("version<4,not support auth tx sent by %X\n", from)
 		return fmt.Errorf("version<4,not support auth tx \n")
 	}
 	if !bytes.Equal(from.Bytes(), PPChainAdmin.Bytes()) {
@@ -94,17 +109,32 @@ func DoAuthHandle(from common.Address, txDataBytes []byte, height int64, sim boo
 	var authTable *AuthTable
 	var posTable *PosTable
 	if sim {
+		if EthAuthTableCopy == nil {
+			return ErrAuthTableNotCreate
+		}
+		if CurrentPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !CurrentPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTableCopy.Copy()
 		posTable = CurrentPosTable.Copy()
 	} else {
+		if EthAuthTable == nil {
+			return ErrAuthTableNotCreate
+		}
+		if NextPosTable == nil {
+			return ErrPosTableNotCreate
+		}
+		if !NextPosTable.InitFlag {
+			return ErrPosTableNotInit
+		}
 		authTable = EthAuthTable
 		posTable = NextPosTable
 	}
-	if authTable == nil {
-		return ErrAuthTableNotCreate
-	}
 	if AppVersion < 4 {
-		fmt.Printf("version<4,not support auth tx sent by %X\n",from)
+		fmt.Printf("version<4,not support auth tx sent by %X\n", from)
 		return fmt.Errorf("version<4,not support auth tx \n")
 	}
 	if !bytes.Equal(from.Bytes(), PPChainAdmin.Bytes()) {

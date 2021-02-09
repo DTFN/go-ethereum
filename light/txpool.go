@@ -185,7 +185,7 @@ func (pool *TxPool) checkMinedTxs(ctx context.Context, hash common.Hash, number 
 		if _, err := GetBlockReceipts(ctx, pool.odr, hash, number); err != nil { // ODR caches, ignore results
 			return err
 		}
-		rawdb.WriteTxLookupEntries(pool.chainDb, block)
+		rawdb.WriteTxLookupEntriesByBlock(pool.chainDb, block)
 
 		// Update the transaction pool's state
 		for _, tx := range list {
@@ -293,7 +293,7 @@ func (pool *TxPool) eventLoop() {
 			// be replaced by a subsequent PR.
 			time.Sleep(time.Millisecond)
 
-			// System stopped
+		// System stopped
 		case <-pool.chainHeadSub.Err():
 			return
 		}
@@ -381,7 +381,7 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 	}
 
 	// Should supply enough intrinsic gas
-	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, true)
+	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, true, pool.istanbul)
 	if err != nil {
 		return err
 	}

@@ -25,6 +25,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	lpc "github.com/ethereum/go-ethereum/les/lespay/client"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -33,6 +34,7 @@ import (
 const (
 	lpv2 = 2
 	lpv3 = 3
+	lpv4 = 4
 )
 
 // Supported versions of the les protocol (first is primary)
@@ -43,7 +45,7 @@ var (
 )
 
 // Number of implemented message corresponding to different protocol versions.
-var ProtocolLengths = map[uint]uint64{lpv2: 22, lpv3: 24}
+var ProtocolLengths = map[uint]uint64{lpv2: 22, lpv3: 24, lpv4: 24}
 
 const (
 	NetworkId          = 1
@@ -77,19 +79,58 @@ const (
 )
 
 type requestInfo struct {
-	name     string
-	maxCount uint64
+	name                          string
+	maxCount                      uint64
+	refBasketFirst, refBasketRest float64
 }
 
-var requests = map[uint64]requestInfo{
-	GetBlockHeadersMsg:     {"GetBlockHeaders", MaxHeaderFetch},
-	GetBlockBodiesMsg:      {"GetBlockBodies", MaxBodyFetch},
-	GetReceiptsMsg:         {"GetReceipts", MaxReceiptFetch},
-	GetCodeMsg:             {"GetCode", MaxCodeFetch},
-	GetProofsV2Msg:         {"GetProofsV2", MaxProofsFetch},
-	GetHelperTrieProofsMsg: {"GetHelperTrieProofs", MaxHelperTrieProofsFetch},
-	SendTxV2Msg:            {"SendTxV2", MaxTxSend},
-	GetTxStatusMsg:         {"GetTxStatus", MaxTxStatus},
+// reqMapping maps an LES request to one or two lespay service vector entries.
+// If rest != -1 and the request type is used with amounts larger than one then the
+// first one of the multi-request is mapped to first while the rest is mapped to rest.
+type reqMapping struct {
+	first, rest int
+}
+
+var (
+	// requests describes the available LES request types and their initializing amounts
+	// in the lespay/client.ValueTracker reference basket. Initial values are estimates
+	// based on the same values as the server's default cost estimates (reqAvgTimeCost).
+	requests = map[uint64]requestInfo{
+		GetBlockHeadersMsg:     {"GetBlockHeaders", MaxHeaderFetch, 10, 1000},
+		GetBlockBodiesMsg:      {"GetBlockBodies", MaxBodyFetch, 1, 0},
+		GetReceiptsMsg:         {"GetReceipts", MaxReceiptFetch, 1, 0},
+		GetCodeMsg:             {"GetCode", MaxCodeFetch, 1, 0},
+		GetProofsV2Msg:         {"GetProofsV2", MaxProofsFetch, 10, 0},
+		GetHelperTrieProofsMsg: {"GetHelperTrieProofs", MaxHelperTrieProofsFetch, 10, 100},
+		SendTxV2Msg:            {"SendTxV2", MaxTxSend, 1, 0},
+		GetTxStatusMsg:         {"GetTxStatus", MaxTxStatus, 10, 0},
+	}
+	requestList    []lpc.RequestInfo
+	requestMapping map[uint32]reqMapping
+)
+
+// init creates a request list and mapping between protocol message codes and lespay
+// service vector indices.
+func init() {
+	requestMapping = make(map[uint32]reqMapping)
+	for code, req := range requests {
+		cost := reqAvgTimeCost[code]
+		rm := reqMapping{len(requestList), -1}
+		requestList = append(requestList, lpc.RequestInfo{
+			Name:       req.name + ".first",
+			InitAmount: req.refBasketFirst,
+			InitValue:  float64(cost.baseCost + cost.reqCost),
+		})
+		if req.refBasketRest != 0 {
+			rm.rest = len(requestList)
+			requestList = append(requestList, lpc.RequestInfo{
+				Name:       req.name + ".rest",
+				InitAmount: req.refBasketRest,
+				InitValue:  float64(cost.reqCost),
+			})
+		}
+		requestMapping[uint32(code)] = rm
+	}
 }
 
 type errCode int
@@ -110,6 +151,7 @@ const (
 	ErrInvalidResponse
 	ErrTooManyTimeouts
 	ErrMissingKey
+	ErrForkIDRejected
 )
 
 func (e errCode) String() string {
@@ -132,12 +174,7 @@ var errorToString = map[int]string{
 	ErrInvalidResponse:         "Invalid response",
 	ErrTooManyTimeouts:         "Too many request timeouts",
 	ErrMissingKey:              "Key missing from list",
-}
-
-type announceBlock struct {
-	Hash   common.Hash // Hash of one particular block being announced
-	Number uint64      // Number of one particular block being announced
-	Td     *big.Int    // Total difficulty of one particular block being announced
+	ErrForkIDRejected:          "ForkID rejected",
 }
 
 // announceData is the network packet for the block announcements.
@@ -159,7 +196,7 @@ func (a *announceData) sanityCheck() error {
 
 // sign adds a signature to the block announcement by the given privKey
 func (a *announceData) sign(privKey *ecdsa.PrivateKey) {
-	rlp, _ := rlp.EncodeToBytes(announceBlock{a.Hash, a.Number, a.Td})
+	rlp, _ := rlp.EncodeToBytes(blockInfo{a.Hash, a.Number, a.Td})
 	sig, _ := crypto.Sign(crypto.Keccak256(rlp), privKey)
 	a.Update = a.Update.add("sign", sig)
 }
@@ -170,7 +207,7 @@ func (a *announceData) checkSignature(id enode.ID, update keyValueMap) error {
 	if err := update.get("sign", &sig); err != nil {
 		return err
 	}
-	rlp, _ := rlp.EncodeToBytes(announceBlock{a.Hash, a.Number, a.Td})
+	rlp, _ := rlp.EncodeToBytes(blockInfo{a.Hash, a.Number, a.Td})
 	recPubkey, err := crypto.SigToPub(crypto.Keccak256(rlp), sig)
 	if err != nil {
 		return err
