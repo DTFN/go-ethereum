@@ -265,8 +265,14 @@ func (tx *Transaction) AsMessageWithFrom(from common.Address) (Message, error) {
 		data:       tx.data.Payload,
 		checkNonce: true,
 	}
-	if txfilter.AppVersion >= 4 { //wipe the transfer value to 0 except bigguy and admin. We are coin-free chain!
+	if txfilter.AppVersion >= 4 {
+		fmt.Println("==================txfilter ppchainadmin===============")
+		fmt.Println(txfilter.PPChainAdmin.String())
+		fmt.Println("==================txfilter ppchainadmin===============")
+		//wipe the transfer value to 0 except bigguy and admin. We are coin-free chain!
 		if !bytes.Equal(from.Bytes(), txfilter.Bigguy.Bytes()) && !bytes.Equal(from.Bytes(), txfilter.PPChainAdmin.Bytes()) {
+			fmt.Println("================we will run the wipe logic===================")
+			fmt.Println("================we will run the wipe logic===================")
 			msg.amount = big.NewInt(0)
 		}
 	}
