@@ -1555,24 +1555,63 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
 func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (common.Hash, error) {
-	// If the transaction fee cap is already specified, ensure the
-	// fee of the given transaction is _reasonable_.
-	if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
-		return common.Hash{}, err
-	}
-	if err := b.SendTx(ctx, tx); err != nil {
-		return common.Hash{}, err
-	}
-	if tx.To() == nil {
-		signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
-		from, err := types.Sender(signer, tx)
-		if err != nil {
+	// ignored for batchTx
+	//// If the transaction fee cap is already specified, ensure the
+	//// fee of the given transaction is _reasonable_.
+	//if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
+	//	return common.Hash{}, err
+	//}
+	//if err := b.SendTx(ctx, tx); err != nil {
+	//	return common.Hash{}, err
+	//}
+	//if tx.To() == nil {
+	//	signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
+	//	from, err := types.Sender(signer, tx)
+	//	if err != nil {
+	//		return common.Hash{}, err
+	//	}
+	//	addr := crypto.CreateAddress(from, tx.Nonce())
+	//	log.Info("Submitted contract creation", "fullhash", tx.Hash().Hex(), "contract", addr.Hex())
+	//} else {
+	//	log.Info("Submitted transaction", "fullhash", tx.Hash().Hex(), "recipient", tx.To())
+	//}
+	//return tx.Hash(), nil
+
+	batchAddress := common.HexToAddress("0x9999999999999999999999999999999999999999")
+	if tx.To() != nil {
+		if bytes.Equal(tx.To().Bytes(), batchAddress.Bytes()) {
+			txBatch, err := UnMarshalTxBatchData(tx.Data())
+			if err != nil {
+			} else {
+				for i := 0; i < len(txBatch.SubTxs); i++ {
+					subTxData := txBatch.SubTxs[i][2:]
+					tx, err = types.DecodeTxFromHexBytes([]byte(subTxData))
+					if err != nil {
+						log.Error(err.Error())
+					}
+					if err = checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
+						return common.Hash{}, err
+					}
+					if err = b.SendTx(ctx, tx); err != nil {
+						return common.Hash{}, err
+					}
+				}
+			}
+		} else {
+			if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
+				return common.Hash{}, err
+			}
+			if err := b.SendTx(ctx, tx); err != nil {
+				return common.Hash{}, err
+			}
+		}
+	} else {
+		if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
 			return common.Hash{}, err
 		}
-		addr := crypto.CreateAddress(from, tx.Nonce())
-		log.Info("Submitted contract creation", "fullhash", tx.Hash().Hex(), "contract", addr.Hex())
-	} else {
-		log.Info("Submitted transaction", "fullhash", tx.Hash().Hex(), "recipient", tx.To())
+		if err := b.SendTx(ctx, tx); err != nil {
+			return common.Hash{}, err
+		}
 	}
 	return tx.Hash(), nil
 }
