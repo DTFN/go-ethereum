@@ -1,19 +1,20 @@
 package txfilter
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	tmTypes "github.com/tendermint/tendermint/types"
 	"math/big"
-	"github.com/ethereum/go-ethereum/crypto"
-	"bytes"
 )
 
 var (
-	SendToLock   = common.HexToAddress("0x7777777777777777777777777777777777777777")
-	SendToUnlock = common.HexToAddress("0x8888888888888888888888888888888888888888")
-	w            = make(map[common.Address]bool)
+	SendToLock     = common.HexToAddress("0x7777777777777777777777777777777777777777")
+	SendToUnlock   = common.HexToAddress("0x8888888888888888888888888888888888888888")
+	BatchTxAddress = common.HexToAddress("0x9999999999999999999999999999999999999999")
+	w              = make(map[common.Address]bool)
 
 	ErrPosTableNotCreate = errors.New("PosTable has not created yet")
 	ErrPosTableNotInit   = errors.New("PosTable has not init yet")
