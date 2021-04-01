@@ -116,6 +116,9 @@ func (posTable *PosTable) String() string {
 
 func (posTable *PosTable) SetThreshold(threshold *big.Int) {
 	posTable.Threshold = threshold
+	fmt.Println("=============ETH THRESHOLD=============")
+	fmt.Println(posTable.Threshold)
+	fmt.Println("=============ETH THRESHOLD=============")
 }
 
 func (posTable *PosTable) InitStruct() {
