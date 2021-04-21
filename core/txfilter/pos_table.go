@@ -178,6 +178,23 @@ func (posTable *PosTable) UpdatePosItem(signer common.Address, newSlots int64) e
 	return nil
 }
 
+
+func (posTable *PosTable) DecreasePosItem(signer common.Address, newSlots int64) error {
+	fmt.Printf("signer %X update slot to %v", signer, newSlots)
+	posTable.ChangedFlagThisBlock = true
+	if existedItem, ok := posTable.PosItemMap[signer]; ok {
+		oldSlots := existedItem.Slots
+		existedItem.Slots = newSlots
+		posTable.SortedPosItems.update(existedItem, posTable.PosItemIndexMap[signer].index)
+		posTable.TotalSlots += existedItem.Slots - oldSlots
+		return nil
+	} else {
+		panic(fmt.Sprintf("UpdatePosItem, signer %X does not exist", signer))
+	}
+	fmt.Printf("signer %X update slot %v SUCCESS", signer, newSlots)
+	return nil
+}
+
 func (posTable *PosTable) InsertPosItem(signer common.Address, pi *PosItem) error {
 	fmt.Printf("signer %X insert pi %v", signer, pi)
 	posTable.ChangedFlagThisBlock = true
