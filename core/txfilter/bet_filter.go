@@ -119,8 +119,7 @@ func IsBetBlocked(from common.Address, to *common.Address, balance *big.Int, txD
 			if to != nil && IsUnlockTx(*to) {
 				return fmt.Errorf("signer %X has not bonded ", from)
 			} else if to != nil && IsLockTx(*to) { //first lock
-				tmpInt := big.NewInt(0)
-				currentSlots := tmpInt.Div(balance, posTable.Threshold).Int64()
+				currentSlots := int64(10)
 
 				if currentSlots < 1 {
 					fmt.Printf("sender %X doesn't have one slot of money", from)
@@ -293,8 +292,7 @@ func DoBetHandle(from common.Address, to *common.Address, balance *big.Int, txDa
 					fmt.Printf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 					return true, fmt.Errorf("blsKeyString %v already be bonded by %X", txData.BlsKeyString, signer)
 				}
-				tmpInt := big.NewInt(0)
-				currentSlots := tmpInt.Div(balance, posTable.Threshold).Int64()
+				currentSlots := int64(10)
 				if currentSlots < 1 {
 					fmt.Printf("signer %X doesn't have one slot of money", from)
 					return true, fmt.Errorf("signer %X doesn't have one slot of money", from)
