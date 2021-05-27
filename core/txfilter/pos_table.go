@@ -164,26 +164,9 @@ func (posTable *PosTable) UpdatePosItem(signer common.Address, newSlots int64) e
 	posTable.ChangedFlagThisBlock = true
 	if existedItem, ok := posTable.PosItemMap[signer]; ok {
 		oldSlots := existedItem.Slots
-		//if newSlots <= oldSlots {
-		//	panic(fmt.Sprintf("UpdatePosItem, signer %X slots not increase. oldSlots %v newSlots %v", signer, oldSlots, newSlots))
-		//}
-		existedItem.Slots = newSlots
-		posTable.SortedPosItems.update(existedItem, posTable.PosItemIndexMap[signer].index)
-		posTable.TotalSlots += existedItem.Slots - oldSlots
-		return nil
-	} else {
-		panic(fmt.Sprintf("UpdatePosItem, signer %X does not exist", signer))
-	}
-	fmt.Printf("signer %X update slot %v SUCCESS", signer, newSlots)
-	return nil
-}
-
-
-func (posTable *PosTable) DecreasePosItem(signer common.Address, newSlots int64) error {
-	fmt.Printf("signer %X update slot to %v", signer, newSlots)
-	posTable.ChangedFlagThisBlock = true
-	if existedItem, ok := posTable.PosItemMap[signer]; ok {
-		oldSlots := existedItem.Slots
+		if newSlots <= oldSlots {
+			panic(fmt.Sprintf("UpdatePosItem, signer %X slots not increase. oldSlots %v newSlots %v", signer, oldSlots, newSlots))
+		}
 		existedItem.Slots = newSlots
 		posTable.SortedPosItems.update(existedItem, posTable.PosItemIndexMap[signer].index)
 		posTable.TotalSlots += existedItem.Slots - oldSlots
