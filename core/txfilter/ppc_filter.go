@@ -91,6 +91,9 @@ func IsAuthBlocked(from common.Address, txDataBytes []byte, height int64, sim bo
 		}
 		return
 	} else if ppcdata.OperationType == "kickout" {
+		if kickoutErr := posTable.CanRemovePosItem(); kickoutErr !=nil{
+			return kickoutErr
+		}
 		if _, ok := posTable.PosItemMap[ppcdata.PermittedAddress]; !ok {
 			fmt.Printf("admin %X wants to kickout %X, but it is not in the PosTable \n", from, ppcdata.PermittedAddress)
 			return fmt.Errorf("admin %X wants to kickout %X, but it is not in the PosTable \n", from, ppcdata.PermittedAddress)
