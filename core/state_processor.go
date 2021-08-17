@@ -17,6 +17,7 @@
 package core
 
 import (
+	"bytes"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -25,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	utxovm2 "github.com/ethereum/go-ethereum/utxovm"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -88,6 +90,15 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 }
 
 func applyTransactionMessage(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, txInfo *types.TxInfo) (*types.Receipt, error) {
+
+	//wenbin add new vm
+	if msg.To() != nil {
+		if bytes.Equal(msg.To().Bytes(), utxovm2.UTXOToFlag.Bytes()) {
+			reciept := utxovm2.UTXOTxProc(msg, statedb, config, header)
+			return reciept, nil
+		}
+	}
+
 	// Create a new context to be used in the EVM environment
 	txContext := NewEVMTxContext(msg)
 	// Add addresses to access list if applicable
