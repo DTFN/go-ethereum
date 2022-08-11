@@ -1448,6 +1448,79 @@ func (s *PublicTransactionPoolAPI) GetTransactionReceipt(ctx context.Context, ha
 	return fields, nil
 }
 
+// GetReceipts returns all the transaction receipts for the given block hash.
+func (s *PublicTransactionPoolAPI) GetReceipts(ctx context.Context, hash common.Hash) ([]map[string]interface{}, error) {
+	if s == nil || s.b == nil {
+		return nil, nil
+	}
+
+	block, err := s.b.BlockByHash(ctx, hash)
+	if err != nil {
+		return nil, nil
+	}
+
+	transactions := block.Transactions()
+	receipts, err := s.b.GetReceipts(ctx, hash)
+	if err != nil {
+		return nil, nil
+	}
+
+	if len(transactions) != len(receipts) || len(receipts) == 0 {
+		return nil, nil
+	}
+
+	blockHash := hash
+	blockNumber := block.NumberU64()
+
+	all_receipts_fields := make([]map[string]interface{}, len(receipts))
+	for i := 0; i < len(receipts); i++ {
+		tx := transactions[i]
+		receipt := receipts[i]
+
+		if tx == nil || receipt == nil {
+			continue
+		}
+
+		var signer types.Signer = types.FrontierSigner{}
+		if tx.Protected() {
+			signer = types.NewEIP155Signer(tx.ChainId())
+		}
+		from, _ := types.Sender(signer, tx)
+
+		fields := map[string]interface{}{
+			"blockHash":         blockHash,
+			"blockNumber":       hexutil.Uint64(blockNumber),
+			"transactionHash":   tx.Hash(),
+			"transactionIndex":  hexutil.Uint64(i),
+			"from":              from,
+			"to":                tx.To(),
+			"gasUsed":           hexutil.Uint64(receipt.GasUsed),
+			"cumulativeGasUsed": hexutil.Uint64(receipt.CumulativeGasUsed),
+			"contractAddress":   nil,
+			"logs":              receipt.Logs,
+			"logsBloom":         receipt.Bloom,
+		}
+
+		// Assign receipt status or post state.
+		if len(receipt.PostState) > 0 {
+			fields["root"] = hexutil.Bytes(receipt.PostState)
+		} else {
+			fields["status"] = hexutil.Uint(receipt.Status)
+		}
+		if receipt.Logs == nil {
+			fields["logs"] = [][]*types.Log{}
+		}
+		// If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
+		if receipt.ContractAddress != (common.Address{}) {
+			fields["contractAddress"] = receipt.ContractAddress
+		}
+
+		all_receipts_fields = append(all_receipts_fields, fields)
+	}
+
+	return all_receipts_fields, nil
+}
+
 // sign is a helper function that signs a transaction with the private key of the given address.
 func (s *PublicTransactionPoolAPI) sign(addr common.Address, tx *types.Transaction) (*types.Transaction, error) {
 	// Look up the wallet containing the requested signer
