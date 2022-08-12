@@ -1472,7 +1472,7 @@ func (s *PublicTransactionPoolAPI) GetReceipts(ctx context.Context, hash common.
 	blockHash := hash
 	blockNumber := block.NumberU64()
 
-	all_receipts_fields := make([]map[string]interface{}, len(receipts))
+	all_receipts_fields := make([]map[string]interface{}, 0, len(receipts))
 	for i := 0; i < len(receipts); i++ {
 		tx := transactions[i]
 		receipt := receipts[i]
