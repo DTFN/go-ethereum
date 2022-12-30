@@ -9,7 +9,7 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
 	github.com/VictoriaMetrics/fastcache v1.5.7
 	github.com/aristanetworks/goarista v0.0.0-20170210015632-ea17b1a17847
-	github.com/aws/aws-sdk-go v1.27.0
+	github.com/aws/aws-sdk-go v1.33.0
 	github.com/btcsuite/btcd v0.21.0-beta
 	github.com/cespare/cp v0.1.0
 	github.com/cloudflare/cloudflare-go v0.10.2-0.20190916151808-a80f83b9add9
@@ -18,7 +18,6 @@ require (
 	github.com/dlclark/regexp2 v1.2.0 // indirect
 	github.com/docker/docker v1.4.2-0.20180625184442-8e610b2b55bf
 	github.com/dop251/goja v0.0.0-20200721192441-a695b0cdd498
-	github.com/dvyukov/go-fuzz v0.0.0-20200318091601-be3528f3a813 // indirect
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elastic/gosigar v0.13.0
 	github.com/fatih/color v1.7.0
@@ -35,13 +34,11 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/holiman/uint256 v1.1.1
 	github.com/huin/goupnp v1.0.0
-	github.com/influxdata/influxdb v1.2.3-0.20180221223340-01288bdb0883 // indirect
 	github.com/influxdata/influxdb1-client v0.0.0-20200827194710-b269163b24ab
 	github.com/jackpal/go-nat-pmp v1.0.2-0.20160603034137-1fa385a6f458
 	github.com/jedisct1/go-minisign v0.0.0-20190909160543-45766022959e
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/karalabe/usb v0.0.0-20190919080040-51dc0efba356
-	github.com/kr/pretty v0.1.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.0
 	github.com/mattn/go-isatty v0.0.5-0.20180830101745-3fb116b82035
@@ -53,7 +50,6 @@ require (
 	github.com/prometheus/tsdb v0.7.1
 	github.com/rjeczalik/notify v0.9.1
 	github.com/rs/cors v1.7.0
-	github.com/rs/xhandler v0.0.0-20160618193221-ed27b6fd6521 // indirect
 	github.com/shirou/gopsutil v2.20.5+incompatible
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/status-im/keycard-go v0.0.0-20190316090335-8537d3370df4
@@ -65,7 +61,6 @@ require (
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
 	github.com/wsddn/go-ecdh v0.0.0-20161211032359-48726bab9208
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
-	golang.org/x/mobile v0.0.0-20200801112145-973feb4309de // indirect
 	golang.org/x/net v0.0.0-20200822124328-c89045814202
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20201015000850-e3ed0017c211
